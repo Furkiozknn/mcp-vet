@@ -14,7 +14,7 @@
 
 ## What is this
 
-`mcp-vet` is a [Claude Code](https://claude.com/claude-code) **skill** — a `SKILL.md` file, no app, no UI, no daemon — that changes how Claude looks for MCP (Model Context Protocol) servers on your behalf.
+`mcp-vet` is a [Claude Code](https://claude.com/claude-code) **skill** — a `SKILL.md` file, no app, no UI, no daemon — that stops Claude from trusting a GitHub star count when you ask it to find an MCP (Model Context Protocol) server.
 
 Most "find me an MCP server" workflows stop at discovery: search, sort by stars, install the top hit. That's the whole failure mode this project exists to interrupt. **Star count is a number anyone can inflate**, and installing an MCP server means running someone else's code with access to your tools, your files, and whatever credentials you hand it. `mcp-vet` inserts two steps that discovery alone skips:
 
