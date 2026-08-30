@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500">
+  <defs>
+    <radialGradient id="cbg" cx="50%" cy="30%" r="90%">
+      <stop offset="0%" stop-color="#0e1a16"/>
+      <stop offset="60%" stop-color="#0a120f"/>
+      <stop offset="100%" stop-color="#060a08"/>
+    </radialGradient>
+    <filter id="cglow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="cgrid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" fill="none" stroke="#8effc2" stroke-opacity="0.04" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="500" fill="url(#cbg)"/>
+  <rect width="1200" height="500" fill="url(#cgrid)"/>
+
+  <text x="600" y="44" text-anchor="middle" font-family="'Cascadia Code','Consolas',monospace" font-weight="700" font-size="24" fill="#e8f5ee" letter-spacing="1">Sorting by Stars vs. Vetting Properly</text>
+
+  <!-- LEFT panel: without mcp-vet -->
+  <g transform="translate(60,80)">
+    <rect width="500" height="380" rx="16" fill="#1a1210" stroke="#e08a6b" stroke-opacity="0.55" stroke-width="1.6"/>
+    <text x="30" y="46" font-family="'Cascadia Code','Consolas',monospace" font-weight="700" font-size="19" fill="#e8a888">✕ Without mcp-vet</text>
+    <line x1="30" y1="60" x2="470" y2="60" stroke="#e08a6b" stroke-opacity="0.3"/>
+
+    <g font-family="Segoe UI, sans-serif" font-size="14.5" fill="#e6cfc6">
+      <g transform="translate(30,92)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#e08a6b" stroke-width="2"/><line x1="-4" y1="-9" x2="4" y2="-1" stroke="#e08a6b" stroke-width="2"/><line x1="4" y1="-9" x2="-4" y2="-1" stroke="#e08a6b" stroke-width="2"/><text x="24" y="0">Sorted by raw star count only</text></g>
+      <g transform="translate(30,132)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#e08a6b" stroke-width="2"/><line x1="-4" y1="-9" x2="4" y2="-1" stroke="#e08a6b" stroke-width="2"/><line x1="4" y1="-9" x2="-4" y2="-1" stroke="#e08a6b" stroke-width="2"/><text x="24" y="0">Inflated / botted stars pass silently</text></g>
+      <g transform="translate(30,172)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#e08a6b" stroke-width="2"/><line x1="-4" y1="-9" x2="4" y2="-1" stroke="#e08a6b" stroke-width="2"/><line x1="4" y1="-9" x2="-4" y2="-1" stroke="#e08a6b" stroke-width="2"/><text x="24" y="0">First result gets installed straight away</text></g>
+      <g transform="translate(30,212)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#e08a6b" stroke-width="2"/><line x1="-4" y1="-9" x2="4" y2="-1" stroke="#e08a6b" stroke-width="2"/><line x1="4" y1="-9" x2="-4" y2="-1" stroke="#e08a6b" stroke-width="2"/><text x="24" y="0">Source code runs — nobody read it first</text></g>
+      <g transform="translate(30,252)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#e08a6b" stroke-width="2"/><line x1="-4" y1="-9" x2="4" y2="-1" stroke="#e08a6b" stroke-width="2"/><line x1="4" y1="-9" x2="-4" y2="-1" stroke="#e08a6b" stroke-width="2"/><text x="24" y="0">No fork ratio or age cross-check</text></g>
+      <g transform="translate(30,292)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#e08a6b" stroke-width="2"/><line x1="-4" y1="-9" x2="4" y2="-1" stroke="#e08a6b" stroke-width="2"/><line x1="4" y1="-9" x2="-4" y2="-1" stroke="#e08a6b" stroke-width="2"/><text x="24" y="0">Trust is a number on a webpage</text></g>
+    </g>
+  </g>
+
+  <!-- center divider -->
+  <g transform="translate(600,270)" filter="url(#cglow)">
+    <circle cx="0" cy="0" r="34" fill="#0a120f" stroke="#8effc2" stroke-width="1.6"/>
+    <text x="0" y="6" text-anchor="middle" font-family="'Cascadia Code','Consolas',monospace" font-weight="700" font-size="14" fill="#8effc2">VS</text>
+  </g>
+
+  <!-- RIGHT panel: with mcp-vet -->
+  <g transform="translate(640,80)">
+    <rect width="500" height="380" rx="16" fill="#0f1c17" stroke="#8effc2" stroke-opacity="0.65" stroke-width="1.6"/>
+    <text x="30" y="46" font-family="'Cascadia Code','Consolas',monospace" font-weight="700" font-size="19" fill="#8effc2">✓ With mcp-vet</text>
+    <line x1="30" y1="60" x2="470" y2="60" stroke="#8effc2" stroke-opacity="0.3"/>
+
+    <g font-family="Segoe UI, sans-serif" font-size="14.5" fill="#d6ecdf">
+      <g transform="translate(30,92)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#8effc2" stroke-width="2"/><path d="M-4,-5 L-1,-1 L5,-9" fill="none" stroke="#8effc2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="0">Stars checked against forks and age</text></g>
+      <g transform="translate(30,132)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#8effc2" stroke-width="2"/><path d="M-4,-5 L-1,-1 L5,-9" fill="none" stroke="#8effc2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="0">Inflation pattern disclosed, not hidden</text></g>
+      <g transform="translate(30,172)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#8effc2" stroke-width="2"/><path d="M-4,-5 L-1,-1 L5,-9" fill="none" stroke="#8effc2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="0">Top 2–3 ranked candidates, with context</text></g>
+      <g transform="translate(30,212)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#8effc2" stroke-width="2"/><path d="M-4,-5 L-1,-1 L5,-9" fill="none" stroke="#8effc2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="0">Every executable file read before install</text></g>
+      <g transform="translate(30,252)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#8effc2" stroke-width="2"/><path d="M-4,-5 L-1,-1 L5,-9" fill="none" stroke="#8effc2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="0">Explicit approval gate, every time</text></g>
+      <g transform="translate(30,292)"><circle cx="0" cy="-5" r="9" fill="none" stroke="#8effc2" stroke-width="2"/><path d="M-4,-5 L-1,-1 L5,-9" fill="none" stroke="#8effc2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="0">Trust comes from evidence, not optics</text></g>
+    </g>
+  </g>
+</svg>

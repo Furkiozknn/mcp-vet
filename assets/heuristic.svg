@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 645" width="1000" height="645">
+  <defs>
+    <radialGradient id="hbg" cx="50%" cy="35%" r="90%">
+      <stop offset="0%" stop-color="#0e1a16"/>
+      <stop offset="60%" stop-color="#0a120f"/>
+      <stop offset="100%" stop-color="#060a08"/>
+    </radialGradient>
+    <filter id="hglow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="coreglow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="hgrid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" fill="none" stroke="#8effc2" stroke-opacity="0.04" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1000" height="645" fill="url(#hbg)"/>
+  <rect width="1000" height="645" fill="url(#hgrid)"/>
+
+  <text x="500" y="46" text-anchor="middle" font-family="'Cascadia Code','Consolas',monospace" font-weight="700" font-size="25" fill="#e8f5ee" letter-spacing="1">The Suspicious-Repo Heuristic</text>
+  <text x="500" y="72" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#c9e8d8" opacity="0.7">a repo is flagged only when all three conditions overlap — matching one or two is normal</text>
+
+  <!-- Venn: three circles, r=160, classic equal-overlap layout -->
+  <g transform="translate(120,120)" style="mix-blend-mode:screen">
+    <circle cx="320" cy="180" r="160" fill="#8ec9ff" fill-opacity="0.28"/>
+    <circle cx="480" cy="180" r="160" fill="#ffd76d" fill-opacity="0.28"/>
+    <circle cx="400" cy="320" r="160" fill="#8effc2" fill-opacity="0.28"/>
+  </g>
+  <g transform="translate(120,120)" fill="none" stroke-width="2">
+    <circle cx="320" cy="180" r="160" stroke="#8ec9ff" stroke-opacity="0.9"/>
+    <circle cx="480" cy="180" r="160" stroke="#ffd76d" stroke-opacity="0.9"/>
+    <circle cx="400" cy="320" r="160" stroke="#8effc2" stroke-opacity="0.9"/>
+  </g>
+
+  <!-- triple-overlap badge -->
+  <g transform="translate(520,420)" filter="url(#coreglow)">
+    <circle cx="0" cy="0" r="46" fill="#161206" stroke="#ffd76d" stroke-width="2.4"/>
+    <text x="0" y="-4" text-anchor="middle" font-family="'Cascadia Code','Consolas',monospace" font-weight="700" font-size="13" fill="#ffd76d">⚠ FLAG</text>
+    <text x="0" y="14" text-anchor="middle" font-family="'Cascadia Code','Consolas',monospace" font-size="10.5" fill="#f3e4c2">all 3 true</text>
+  </g>
+
+  <!-- labels with leader lines -->
+  <g font-family="'Cascadia Code','Consolas',monospace" font-size="16">
+    <line x1="120" y1="150" x2="70" y2="110" stroke="#8ec9ff" stroke-opacity="0.6" stroke-width="1.2"/>
+    <text x="30" y="95" text-anchor="start" fill="#8ec9ff" font-weight="700">stars &gt; 3000</text>
+    <text x="30" y="118" text-anchor="start" fill="#c9e8d8" font-size="12.5" font-family="Segoe UI, sans-serif" opacity="0.75">raw popularity looks big</text>
+
+    <line x1="880" y1="150" x2="920" y2="110" stroke="#ffd76d" stroke-opacity="0.6" stroke-width="1.2"/>
+    <text x="960" y="95" text-anchor="end" fill="#ffd76d" font-weight="700">age &lt; 180 days</text>
+    <text x="960" y="118" text-anchor="end" fill="#c9e8d8" font-size="12.5" font-family="Segoe UI, sans-serif" opacity="0.75">too young to earn that organically</text>
+
+    <line x1="520" y1="580" x2="520" y2="545" stroke="#8effc2" stroke-opacity="0.6" stroke-width="1.2"/>
+    <text x="520" y="600" text-anchor="middle" fill="#8effc2" font-weight="700">forks / stars &lt; 0.12</text>
+    <text x="520" y="617" text-anchor="middle" fill="#c9e8d8" font-size="12.5" font-family="Segoe UI, sans-serif" opacity="0.75">admired but nobody's actually using it</text>
+  </g>
+
+</svg>
