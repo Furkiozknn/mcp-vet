@@ -1,15 +1,17 @@
-# mcp-vet
+![mcp-vet](assets/banner.svg)
+
+# 🔍 mcp-vet
 
 A [Claude Code](https://claude.com/claude-code) skill that discovers, vets, and safely installs MCP (Model Context Protocol) servers.
 
 Most "find me an MCP server" tools stop at discovery. This one adds the two steps that actually matter before you run someone else's code on your machine:
 
-1. **Vets popularity signals** — flags repos whose star count looks inflated relative to their fork count and age, instead of trusting raw star count.
-2. **Reviews source before install** — clones the candidate to a scratch directory, reads the actual executable code, and flags anything that looks like it does more than the README claims.
+1. 📊 **Vets popularity signals** — flags repos whose star count looks inflated relative to their fork count and age, instead of trusting raw star count.
+2. 🕵️ **Reviews source before install** — clones the candidate to a scratch directory, reads the actual executable code, and flags anything that looks like it does more than the README claims.
 
-Nothing gets installed without an explicit approval step.
+🚦 Nothing gets installed without an explicit approval step.
 
-## Install
+## 📥 Install
 
 Copy `SKILL.md` into your Claude Code skills directory:
 
@@ -20,7 +22,7 @@ cp SKILL.md ~/.claude/skills/mcp-vet/
 
 (Or drop it in a project's `.claude/skills/mcp-vet/` for project-only scope.)
 
-## Use
+## 💬 Use
 
 Ask Claude Code things like:
 
@@ -30,7 +32,7 @@ Ask Claude Code things like:
 
 The skill triggers automatically on requests like these once installed.
 
-## The vetting heuristic
+## ⚖️ The vetting heuristic
 
 A repo is flagged as **suspicious** when all three hold:
 
@@ -40,6 +42,6 @@ A repo is flagged as **suspicious** when all three hold:
 
 This isn't a hard rule that disqualifies a repo — it's a disclosed flag. Young, official-org projects sometimes grow fast for legitimate reasons. The point is you find out about the pattern instead of it being silently absorbed into a star-count-sorted recommendation.
 
-## License
+## 📄 License
 
 MIT
