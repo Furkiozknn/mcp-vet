@@ -228,10 +228,14 @@ class TestFetchRepo:
 
     @patch("vet.urllib.request.urlopen")
     def test_fetch_repo_404_raises_system_exit(self, mock_urlopen):
+        import io
         import urllib.error
 
+        # _request() calls exc.read() on the HTTPError, so the mock needs a
+        # real readable body (fp=None works on some Python versions' urllib
+        # internals but raises KeyError: 'file' on 3.9 when .read() is called).
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="x", code=404, msg="Not Found", hdrs=None, fp=None
+            url="x", code=404, msg="Not Found", hdrs=None, fp=io.BytesIO(b"Not Found")
         )
         with pytest.raises(SystemExit):
             vet.fetch_repo("nope/nope")
