@@ -31,6 +31,8 @@ For every candidate, pull with `gh api repos/<owner>/<repo> --jq '{stars: .starg
 
 A repo can fail this check and still be real (young official-org projects sometimes grow fast) — but disclose the flag explicitly rather than silently filtering it out or silently recommending it.
 
+This step is mechanical enough to run outside the conversation: `python3 vet.py check <owner>/<repo>` or `python3 vet.py search "<need> mcp"` (shipped in this repo) apply the exact same heuristic and print the same verdict, if hand-composing `gh api` calls isn't necessary. It's read-only and stops there — it never clones or installs anything, so Steps 5 and 6 below still happen here, by you.
+
 **Secondary maturity signals** (no hard cutoff, weigh together):
 - `pushed_at` recent (maintained) vs. stale (no commits in 6+ months)
 - Non-empty README with real usage docs, not just a marketing blurb

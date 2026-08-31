@@ -23,6 +23,7 @@ Most "find me an MCP server" workflows stop at discovery: search, sort by stars,
 | 📊 **Vets the popularity signal** | Flags repos whose star count looks inflated relative to their fork count and age, instead of trusting raw stars. |
 | 🕵️ **Reads the source before install** | Clones the candidate to a scratch directory and reads the actual executable code — not just the README — before anything is added to your setup. |
 | 🚦 **Never installs blind** | Nothing gets added to `.mcp.json` or `~/.claude/skills/` without an explicit approval step from you. |
+| 🖥️ **Also works headless** | The vetting math (`vet.py`) runs standalone — no Claude conversation required — for scripting or CI, and it's still read-only. |
 
 ---
 
@@ -31,6 +32,7 @@ Most "find me an MCP server" workflows stop at discovery: search, sort by stars,
 - [Why this exists](#-why-this-exists)
 - [The vetting pipeline](#-the-vetting-pipeline)
 - [The suspicious-repo heuristic](#-the-suspicious-repo-heuristic)
+- [The `vet.py` CLI](#-the-vetpy-cli)
 - [Install](#-install)
 - [Usage](#-usage)
 - [What this skill deliberately does not do](#-what-this-skill-deliberately-does-not-do)
@@ -91,6 +93,58 @@ Beyond the hard heuristic, a few secondary signals get weighed together (no hard
 | README quality | Real usage docs vs. a marketing blurb with no substance |
 | License present | Missing license is a legal yellow flag for reuse — not a safety one |
 | Archived status | Archived repos are deprioritized regardless of star count |
+
+---
+
+## 🖥️ The `vet.py` CLI
+
+Steps 2-4 of the pipeline (search, vet, rank) are entirely mechanical — no judgment call, no source-reading, just arithmetic on numbers GitHub already publishes. `vet.py` runs exactly that part outside of a Claude Code conversation: from a shell, from a CI pipeline, or from Claude via `Bash` if it'd rather run one command than hand-compose `gh api` calls.
+
+```bash
+# Vet one repo by name
+python3 vet.py check anthropics/mcp-server-example
+
+# Search + rank candidates for a need, same phrasing SKILL.md's Step 2 uses
+python3 vet.py search "discord mcp" --limit 5
+```
+
+Sample `check` output:
+
+```text
+Repo:        hype-org/turbo-mcp
+Description: A blazing fast MCP server
+URL:         https://github.com/hype-org/turbo-mcp
+Stars:       8400
+Forks:       210  (ratio 0.025)
+Age:         122 days (created 2026-05-01)
+Last push:   2026-08-25
+License:     none
+Archived:    no
+
+Verdict: SUSPICIOUS
+  stars > 3000 AND age < 180d AND forks/stars < 0.12 all hold.
+  This is a disclosed flag, not a verdict — a young official-org repo
+  can legitimately grow fast. It means the popularity signal doesn't
+  match the usual star/fork/age relationship, so read the source
+  before installing (SKILL.md Step 5). Never skip that step.
+
+Secondary signals: no license on file
+```
+
+| | |
+|---|---|
+| 🔩 **Zero dependencies** | Pure standard library — `urllib.request` against the GitHub REST API directly. `python3 vet.py ...` works with no `pip install` step. Set `GITHUB_TOKEN` (or `GH_TOKEN`) in your environment to raise the unauthenticated rate limit; no token is required for occasional use. |
+| 📖 **Read-only, always** | It never clones a repo, never writes to `.mcp.json` or `~/.claude/skills/`, and never installs anything — it only prints a report. |
+| 🧩 **Automates 2-4, not 5-6** | Search/vet/rank is what got automated. Step 5 (read every executable file) and Step 6 (install with explicit approval) stay exactly where SKILL.md puts them: with a human, or with Claude reading and reporting back — never with a script deciding on its own. |
+
+This complements the skill, it doesn't replace it: `SKILL.md` is what Claude follows end-to-end inside a conversation (clarify → search → vet → rank → **review source** → **install on approval** → record). `vet.py` is the same search/vet/rank logic, callable directly, for the parts that never needed an LLM's judgment in the first place.
+
+Run the test suite (mocks the GitHub API — no network, no `gh` CLI needed):
+
+```bash
+python3 -m pip install -e .[dev]
+python3 -m pytest
+```
 
 ---
 
