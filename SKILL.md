@@ -1,6 +1,8 @@
 ---
 name: mcp-vet
 description: Discover, vet, and safely install MCP servers for a described need. Searches GitHub, flags likely-inflated or fake repos using a star/fork/age heuristic, reviews the source before anything gets installed. Use when the user asks "is there an MCP for X", "find me an MCP server that does Y", "kur mcp", "hangi MCP var", "bana bir MCP bul", or wants to add a new MCP server safely.
+license: MIT
+compatibility: Requires the gh CLI (authenticated) and network access to github.com
 ---
 
 # MCP Vet — discover, vet, and safely install MCP servers
