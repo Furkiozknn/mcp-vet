@@ -102,10 +102,10 @@ Steps 2-4 of the pipeline (search, vet, rank) are entirely mechanical — no jud
 
 ```bash
 # Vet one repo by name
-python3 vet.py check anthropics/mcp-server-example
+python3 scripts/vet.py check anthropics/mcp-server-example
 
 # Search + rank candidates for a need, same phrasing SKILL.md's Step 2 uses
-python3 vet.py search "discord mcp" --limit 5
+python3 scripts/vet.py search "discord mcp" --limit 5
 ```
 
 Sample `check` output:
@@ -133,7 +133,7 @@ Secondary signals: no license on file
 
 | | |
 |---|---|
-| 🔩 **Zero dependencies** | Pure standard library — `urllib.request` against the GitHub REST API directly. `python3 vet.py ...` works with no `pip install` step. Set `GITHUB_TOKEN` (or `GH_TOKEN`) in your environment to raise the unauthenticated rate limit; no token is required for occasional use. |
+| 🔩 **Zero dependencies** | Pure standard library — `urllib.request` against the GitHub REST API directly. `python3 scripts/vet.py ...` works with no `pip install` step. Set `GITHUB_TOKEN` (or `GH_TOKEN`) in your environment to raise the unauthenticated rate limit; no token is required for occasional use. |
 | 📖 **Read-only, always** | It never clones a repo, never writes to `.mcp.json` or `~/.claude/skills/`, and never installs anything — it only prints a report. |
 | 🧩 **Automates 2-4, not 5-6** | Search/vet/rank is what got automated. Step 5 (read every executable file) and Step 6 (install with explicit approval) stay exactly where SKILL.md puts them: with a human, or with Claude reading and reporting back — never with a script deciding on its own. |
 
@@ -150,16 +150,17 @@ python3 -m pytest
 
 ## 📥 Install
 
-Copy `SKILL.md` into your Claude Code skills directory:
+Copy `SKILL.md` **and** `scripts/vet.py` into your Claude Code skills directory — the script has to travel with the skill, or Step 2/3's `python3 scripts/vet.py ...` calls will fail with "file not found" the moment Claude tries to run them:
 
 ```bash
-mkdir -p ~/.claude/skills/mcp-vet
+mkdir -p ~/.claude/skills/mcp-vet/scripts
 cp SKILL.md ~/.claude/skills/mcp-vet/
+cp scripts/vet.py ~/.claude/skills/mcp-vet/scripts/
 ```
 
-Or drop it into a single project's `.claude/skills/mcp-vet/` for project-only scope instead of installing it globally.
+Or drop the same two files into a single project's `.claude/skills/mcp-vet/` for project-only scope instead of installing it globally.
 
-That's the entire install. No dependencies, no build step, no config file — it's one Markdown file that Claude Code reads as a skill definition.
+That's the entire install. No dependencies to `pip install`, no build step, no config file — one Markdown file plus one zero-dependency stdlib script.
 
 ---
 

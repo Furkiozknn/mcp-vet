@@ -3,6 +3,31 @@
 All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] — 2026-09-01
+
+### Changed
+
+- **`vet.py` moved to `scripts/vet.py`** (Agent Skills spec convention for
+  bundled scripts) and **`test_vet.py` moved to `tests/test_vet.py`** -
+  0.2.0 shipped `vet.py` at repo root and SKILL.md referenced it as
+  `python3 vet.py ...`, but the README's own Install instructions only ever
+  copied `SKILL.md` into `~/.claude/skills/mcp-vet/` - the script itself was
+  never actually deployed alongside the skill, so following SKILL.md's own
+  Step 3 pointer inside a real Claude Code session would have failed with
+  "file not found". Fixed by bundling the script under `scripts/` and
+  updating the Install section to copy both.
+- SKILL.md Steps 2 and 3 now point to `scripts/vet.py search`/`check` as the
+  *preferred* path (one command instead of hand-composing `gh api` calls),
+  with the manual `gh api`/`gh search` fallback kept as a documented
+  fallback rather than the primary instruction.
+- `pyproject.toml`: `testpaths` now `["tests"]` (was `["."]`), added
+  `pythonpath = ["scripts"]` so `import vet` in the tests keeps working
+  from its new location. `.github/workflows/ci.yml` needed no changes.
+- Re-synced the deployed copy at `~/.claude/skills/mcp-vet/` - it had
+  drifted behind this repo's SKILL.md (missing the 0.2.0 vet.py pointer
+  entirely, despite CHANGELOG 0.2.0 claiming it was added) in addition to
+  now also getting `scripts/vet.py`.
+
 ## [0.2.0] — 2026-08-31
 
 ### Added

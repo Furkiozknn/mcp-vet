@@ -15,25 +15,25 @@ Restate the need in one line before searching (e.g. "an MCP server that lets Cla
 
 ## Step 2 — Search GitHub
 
-Use `gh search repos "<need> mcp"` (and `"<need> mcp server"` as a second phrasing — results vary). If results are thin (under 3 real candidates), also check the major curated lists for a match:
+Prefer `python3 scripts/vet.py search "<need> mcp" --limit 10` (bundled with this skill) — it searches, then applies Step 3's heuristic to every result and prints a ranked table in one call, so Steps 2-4 collapse into a single command. Try `"<need> mcp server"` too as a second phrasing if results are thin (under 3 real candidates); also check the major curated lists for a match:
 - `punkpeye/awesome-mcp-servers`
 - `appcypher/awesome-mcp-servers`
 - `wong2/awesome-mcp-servers`
 
-Pull at least 5-10 raw candidates before filtering — a thin initial search misses legitimate but less-SEO'd repos.
+If the script isn't available for some reason, fall back to `gh search repos "<need> mcp"` and hand-apply Step 3's heuristic per candidate. Pull at least 5-10 raw candidates before filtering — a thin initial search misses legitimate but less-SEO'd repos.
 
 ## Step 3 — Vet each candidate (the legitimacy heuristic)
 
-For every candidate, pull with `gh api repos/<owner>/<repo> --jq '{stars: .stargazers_count, forks: .forks_count, created: .created_at, pushed: .pushed_at, archived: .archived, license: .license.name}'`.
+If Step 2 already ran `scripts/vet.py search`, each candidate's flag is already in the table it printed — read those, no extra step needed. For a single candidate not covered by that search (e.g. the user names a specific repo directly), run `python3 scripts/vet.py check <owner>/<repo>`.
+
+Falling back to `gh api` by hand (only if the script isn't available): pull with `gh api repos/<owner>/<repo> --jq '{stars: .stargazers_count, forks: .forks_count, created: .created_at, pushed: .pushed_at, archived: .archived, license: .license.name}'` and apply the same heuristic:
 
 **Flag as SUSPICIOUS (likely inflated/fake) when ALL three are true:**
 - `stargazers_count > 3000`
 - Repo age < 180 days (from `created_at` to today)
 - `forks_count / stargazers_count < 0.12`
 
-A repo can fail this check and still be real (young official-org projects sometimes grow fast) — but disclose the flag explicitly rather than silently filtering it out or silently recommending it.
-
-This step is mechanical enough to run outside the conversation: `python3 vet.py check <owner>/<repo>` or `python3 vet.py search "<need> mcp"` (shipped in this repo) apply the exact same heuristic and print the same verdict, if hand-composing `gh api` calls isn't necessary. It's read-only and stops there — it never clones or installs anything, so Steps 5 and 6 below still happen here, by you.
+A repo can fail this check and still be real (young official-org projects sometimes grow fast) — but disclose the flag explicitly rather than silently filtering it out or silently recommending it. Either way (script or manual), this step is read-only and stops there — it never clones or installs anything, so Steps 5 and 6 below still happen here, by you.
 
 **Secondary maturity signals** (no hard cutoff, weigh together):
 - `pushed_at` recent (maintained) vs. stale (no commits in 6+ months)
