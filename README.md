@@ -108,6 +108,13 @@ python3 scripts/vet.py check anthropics/mcp-server-example
 python3 scripts/vet.py search "discord mcp" --limit 5
 ```
 
+No bare `python3`/`python` on PATH (e.g. Windows with only the Microsoft Store
+app-execution-alias stub, no real interpreter registered)? Run it through
+`uv` instead — `uv run python scripts/vet.py ...` works with zero setup,
+since `uv` manages its own Python and doesn't need one on PATH already.
+This is what SKILL.md itself uses, since it can't assume `python3` resolves
+to a real interpreter on every machine it runs on.
+
 Sample `check` output:
 
 ```text
@@ -150,7 +157,7 @@ python3 -m pytest
 
 ## 📥 Install
 
-Copy `SKILL.md` **and** `scripts/vet.py` into your Claude Code skills directory — the script has to travel with the skill, or Step 2/3's `python3 scripts/vet.py ...` calls will fail with "file not found" the moment Claude tries to run them:
+Copy `SKILL.md` **and** `scripts/vet.py` into your Claude Code skills directory — the script has to travel with the skill, or Step 2/3's `uv run python scripts/vet.py ...` calls will fail with "file not found" the moment Claude tries to run them:
 
 ```bash
 mkdir -p ~/.claude/skills/mcp-vet/scripts

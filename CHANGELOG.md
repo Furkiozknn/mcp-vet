@@ -27,6 +27,18 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   drifted behind this repo's SKILL.md (missing the 0.2.0 vet.py pointer
   entirely, despite CHANGELOG 0.2.0 claiming it was added) in addition to
   now also getting `scripts/vet.py`.
+- SKILL.md's `scripts/vet.py` calls now run via `uv run python scripts/
+  vet.py ...`, not bare `python3 scripts/vet.py ...` - verified live that
+  this machine has no working system `python3`/`python` on PATH (only the
+  Microsoft Store app-execution-alias stub, which prints "Python was not
+  found" and exits), so the bare-`python3` instruction this fix started
+  with would itself have failed the moment Claude actually ran it. `uv run
+  python` works with zero setup since `uv` manages its own interpreter.
+  `compatibility` frontmatter updated to reflect `uv` as the primary
+  runtime dependency, `gh` CLI as the documented fallback (was reversed).
+  README's own usage examples keep bare `python3` as the general-audience
+  default (this is a real interpreter on most machines) with a note about
+  the `uv run python` alternative for the same PATH situation.
 
 ## [0.2.0] — 2026-08-31
 

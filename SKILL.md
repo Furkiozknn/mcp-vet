@@ -2,7 +2,7 @@
 name: mcp-vet
 description: Discover, vet, and safely install MCP servers for a described need. Searches GitHub, flags likely-inflated or fake repos using a star/fork/age heuristic, reviews the source before anything gets installed. Use when the user asks "is there an MCP for X", "find me an MCP server that does Y", "kur mcp", "hangi MCP var", "bana bir MCP bul", or wants to add a new MCP server safely.
 license: MIT
-compatibility: Requires the gh CLI (authenticated) and network access to github.com
+compatibility: Requires network access to github.com. Prefers `uv` (to run the bundled scripts/vet.py - no bare `python3` assumed on PATH); falls back to the `gh` CLI (authenticated) if `uv` or the script isn't available.
 ---
 
 # MCP Vet — discover, vet, and safely install MCP servers
@@ -15,7 +15,7 @@ Restate the need in one line before searching (e.g. "an MCP server that lets Cla
 
 ## Step 2 — Search GitHub
 
-Prefer `python3 scripts/vet.py search "<need> mcp" --limit 10` (bundled with this skill) — it searches, then applies Step 3's heuristic to every result and prints a ranked table in one call, so Steps 2-4 collapse into a single command. Try `"<need> mcp server"` too as a second phrasing if results are thin (under 3 real candidates); also check the major curated lists for a match:
+Prefer `uv run python scripts/vet.py search "<need> mcp" --limit 10` (bundled with this skill) — it searches, then applies Step 3's heuristic to every result and prints a ranked table in one call, so Steps 2-4 collapse into a single command. Try `"<need> mcp server"` too as a second phrasing if results are thin (under 3 real candidates); also check the major curated lists for a match:
 - `punkpeye/awesome-mcp-servers`
 - `appcypher/awesome-mcp-servers`
 - `wong2/awesome-mcp-servers`
@@ -24,7 +24,7 @@ If the script isn't available for some reason, fall back to `gh search repos "<n
 
 ## Step 3 — Vet each candidate (the legitimacy heuristic)
 
-If Step 2 already ran `scripts/vet.py search`, each candidate's flag is already in the table it printed — read those, no extra step needed. For a single candidate not covered by that search (e.g. the user names a specific repo directly), run `python3 scripts/vet.py check <owner>/<repo>`.
+If Step 2 already ran `scripts/vet.py search`, each candidate's flag is already in the table it printed — read those, no extra step needed. For a single candidate not covered by that search (e.g. the user names a specific repo directly), run `uv run python scripts/vet.py check <owner>/<repo>`.
 
 Falling back to `gh api` by hand (only if the script isn't available): pull with `gh api repos/<owner>/<repo> --jq '{stars: .stargazers_count, forks: .forks_count, created: .created_at, pushed: .pushed_at, archived: .archived, license: .license.name}'` and apply the same heuristic:
 
