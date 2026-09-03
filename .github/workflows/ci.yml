@@ -9,8 +9,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.9", "3.11", "3.12"]
+        python-version: ["3.9", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -24,3 +25,84 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  # The unit tests mock every request. This job proves the packaged CLI works
+  # end to end on a real filesystem, and - more importantly - that the exit
+  # codes a CI gate depends on are what the docs promise. A scanner whose exit
+  # code silently drifts is a gate that silently stops gating.
+  cli-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Clean fixture must exit 0
+        run: |
+          mcp-vet audit --offline --path tests/fixtures/clean_server
+          test $? -eq 0
+
+      - name: Exfiltration fixture must exit 2 (HIGH)
+        run: |
+          set +e
+          mcp-vet audit --offline --path tests/fixtures/exfil_server >/dev/null
+          code=$?
+          set -e
+          test "$code" -eq 2 || { echo "expected exit 2, got $code"; exit 1; }
+
+      - name: Poisoned fixture must exit 3 (CRITICAL)
+        run: |
+          set +e
+          mcp-vet audit --offline --path tests/fixtures/poisoned_server >/dev/null
+          code=$?
+          set -e
+          test "$code" -eq 3 || { echo "expected exit 3, got $code"; exit 1; }
+
+      - name: Bad invocation must exit 4, not 0
+        run: |
+          set +e
+          mcp-vet audit --offline >/dev/null 2>&1
+          code=$?
+          set -e
+          test "$code" -eq 4 || { echo "expected exit 4, got $code"; exit 1; }
+
+      - name: JSON output must parse and carry a schema version
+        run: |
+          mcp-vet report --offline --path tests/fixtures/exfil_server > report.json
+          python3 -c "import json; d=json.load(open('report.json')); assert d['schema_version']; assert d['findings']"
+
+      - name: Report must contain no terminal escape sequences
+        run: |
+          mcp-vet audit --offline --path tests/fixtures/hostile_text --verbose > out.txt
+          python3 -c "
+          data = open('out.txt', 'rb').read()
+          for bad in (b'\x1b', b'\x00', b'\x07'):
+              assert bad not in data, 'escape sequence leaked into output: %r' % bad
+          print('output is clean')
+          "
+
+      # mcp-vet audits itself, and is EXPECTED to flag itself CRITICAL. Its
+      # rule catalogue contains the very patterns it searches for, and its
+      # fixtures are deliberately malicious. See "Worked example" in
+      # SECURITY.md. What this step asserts is that the run completes and
+      # produces a valid report - not a severity ceiling, which would only
+      # tempt someone to tune the rules until the tool stopped seeing itself.
+      - name: Self-audit completes and produces a valid report
+        run: |
+          set +e
+          mcp-vet report --offline --path . --purpose "MCP server security auditor" > self.json
+          code=$?
+          set -e
+          test "$code" -ne 4 || { echo "self-audit failed to run"; exit 1; }
+          python3 -c "
+          import json
+          d = json.load(open('self.json'))
+          assert d['schema_version'], 'no schema version'
+          assert d['findings'], 'self-audit found nothing, which would mean the rules stopped firing'
+          print('self-audit produced', len(d['findings']), 'findings as expected')
+          "
