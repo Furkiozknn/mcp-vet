@@ -1,0 +1,228 @@
+"""The mcp-vet command line.
+
+Commands exist only where they answer a different question:
+
+* `search`   - which servers exist for a need (GitHub)
+* `registry` - which servers exist for a need (official MCP Registry)
+* `check`    - the fast metadata-only look at one repository
+* `audit`    - the full analysis, and the one that reads source
+* `report`   - `audit`, JSON by default, for another program to consume
+
+Exit codes are part of the interface and are documented in the README, so
+`mcp-vet audit owner/repo` can be a CI gate:
+
+    0  nothing above INFO
+    1  LOW or MEDIUM findings
+    2  HIGH findings
+    3  CRITICAL findings
+    4  mcp-vet itself could not complete
+
+The distinction between 0 and 4 is the important one: "found nothing" and
+"could not look" must never share an exit code, or a broken gate reads as a
+passing one.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from typing import List, Optional
+
+from . import registry as registry_mod
+from . import risk as risk_mod
+from .audit import audit_directory, audit_repository
+from .github import fetch_repo, search_repos
+from .http import FetchError, NotFound, RateLimited
+from .popularity import assess as popularity_assess
+from .popularity import age_days, fork_ratio, is_suspicious
+from .models import Severity
+from .report import render_search_table, render_text
+from .scanning import sanitize_text
+
+
+def _evaluate_for_table(meta) -> dict:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    return {
+        "suspicious": is_suspicious(meta.stars, meta.forks, meta.created_at, now),
+        "age_days": age_days(meta.created_at, now),
+        "fork_ratio": fork_ratio(meta.forks, meta.stars),
+    }
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    candidates = search_repos(args.query, args.limit)
+    rows = [(meta, _evaluate_for_table(meta)) for meta in candidates]
+    print(render_search_table(rows))
+    return risk_mod.EXIT_CLEAN
+
+
+def cmd_registry(args: argparse.Namespace) -> int:
+    servers = registry_mod.search(args.query, limit=args.limit)
+    if not servers:
+        print("No matching servers in the MCP Registry.")
+        print(
+            "Note: the registry's search matches server names only, so a phrase may "
+            "find nothing where a single keyword finds plenty."
+        )
+        return risk_mod.EXIT_CLEAN
+
+    print(f"{'server':<44}{'version':<10}source")
+    print("-" * 92)
+    for server in servers:
+        name = server.name if len(server.name) <= 43 else server.name[:40] + "..."
+        source = server.repository_url or "(no repository declared)"
+        print(f"{name:<44}{(server.version or '?'):<10}{source}")
+    print()
+    remote_only = [s for s in servers if s.is_remote_only]
+    if remote_only:
+        print(
+            f"{len(remote_only)} of these are remote-only: you would send data to a "
+            "service rather than run code you can read."
+        )
+    print(
+        "Registry listing is a provenance link, not a review. Nothing here has been "
+        "vetted by anyone; run `mcp-vet audit` on the source before installing."
+    )
+    return risk_mod.EXIT_CLEAN
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Metadata only - deliberately the weakest command, and it says so."""
+    meta = fetch_repo(args.repo)
+    assessment, findings = popularity_assess(meta)
+    ratio = fork_ratio(meta.forks, meta.stars)
+    from datetime import datetime, timezone
+
+    days = age_days(meta.created_at, datetime.now(timezone.utc))
+
+    print(f"Repository   {meta.full_name}")
+    print(f"Description  {meta.description or '(none)'}")
+    print(f"URL          {meta.html_url}")
+    print(f"Owner        {meta.owner_login or '?'} ({meta.owner_type or 'unknown type'})")
+    print(f"Stars        {meta.stars}")
+    print(f"Forks        {meta.forks}  (ratio {ratio:.3f})")
+    print(f"Age          {days} days (created {meta.created_at[:10]})")
+    print(f"Last push    {meta.pushed_at[:10]}")
+    print(f"License      {meta.license or 'none'}")
+    print(f"Archived     {'yes' if meta.archived else 'no'}")
+    print(f"Fork         {'yes' if meta.is_fork else 'no'}")
+    print()
+    print(f"Popularity integrity: {assessment.severity.value}")
+    print(f"  {assessment.summary}")
+    print()
+    print(
+        "This is metadata only. It says nothing about what the code does - no source "
+        "was read. Run `mcp-vet audit " + args.repo + " --path <checkout>` for that."
+    )
+    return risk_mod.exit_code_for(assessment.severity)
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    if args.offline:
+        if not args.path:
+            print("error: --offline requires --path <directory>", file=sys.stderr)
+            return risk_mod.EXIT_ERROR
+        report = audit_directory(args.path, purpose=args.purpose or "", target=args.repo or args.path)
+    else:
+        if not args.repo:
+            print("error: audit needs <owner>/<repo>, or --offline --path <directory>",
+                  file=sys.stderr)
+            return risk_mod.EXIT_ERROR
+        report = audit_repository(
+            args.repo,
+            local_path=args.path,
+            check_registry=not args.no_registry,
+        )
+
+    if args.json:
+        print(report.to_json())
+    else:
+        print(render_text(report, verbose=args.verbose, quiet=args.quiet))
+    return risk_mod.exit_code_for(report.overall)
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    args.json = not args.text
+    args.verbose = False
+    args.quiet = False
+    return cmd_audit(args)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mcp-vet",
+        description=(
+            "Evidence-gathering for MCP servers. Collects what a server can do, what "
+            "credentials it wants, where it can send data, and what its provenance is - "
+            "then shows you, with the file and line for every claim. It never decides "
+            "that something is safe, and it never installs anything."
+        ),
+        epilog=(
+            "Exit codes: 0 nothing above INFO, 1 low/medium, 2 high, 3 critical, "
+            "4 mcp-vet could not complete."
+        ),
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_search = sub.add_parser("search", help="Find candidate servers on GitHub")
+    p_search.add_argument("query", help='e.g. "discord mcp"')
+    p_search.add_argument("--limit", type=int, default=10)
+    p_search.set_defaults(func=cmd_search)
+
+    p_registry = sub.add_parser("registry", help="Search the official MCP Registry")
+    p_registry.add_argument("query", help='e.g. "discord"')
+    p_registry.add_argument("--limit", type=int, default=10)
+    p_registry.set_defaults(func=cmd_registry)
+
+    p_check = sub.add_parser("check", help="Metadata-only look at one repository")
+    p_check.add_argument("repo", help="owner/repo")
+    p_check.set_defaults(func=cmd_check)
+
+    p_audit = sub.add_parser("audit", help="Full analysis of one server")
+    p_audit.add_argument("repo", nargs="?", help="owner/repo")
+    p_audit.add_argument("--path", help="local checkout to analyze (source analysis needs this)")
+    p_audit.add_argument("--offline", action="store_true",
+                         help="analyze --path only; make no network requests")
+    p_audit.add_argument("--no-registry", action="store_true", help="skip the MCP Registry lookup")
+    p_audit.add_argument("--purpose", help="what the server claims to do (improves endpoint classification)")
+    p_audit.add_argument("--json", action="store_true", help="machine-readable output")
+    p_audit.add_argument("--verbose", action="store_true", help="include snippets and area summaries")
+    p_audit.add_argument("--quiet", action="store_true", help="verdict line only")
+    p_audit.set_defaults(func=cmd_audit)
+
+    p_report = sub.add_parser("report", help="Audit, emitting JSON by default")
+    p_report.add_argument("repo", nargs="?", help="owner/repo")
+    p_report.add_argument("--path")
+    p_report.add_argument("--offline", action="store_true")
+    p_report.add_argument("--no-registry", action="store_true")
+    p_report.add_argument("--purpose")
+    p_report.add_argument("--text", action="store_true", help="render text instead of JSON")
+    p_report.set_defaults(func=cmd_report)
+
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except NotFound as exc:
+        print(f"error: not found - {sanitize_text(exc.message)}", file=sys.stderr)
+        return risk_mod.EXIT_ERROR
+    except RateLimited as exc:
+        print(f"error: {sanitize_text(exc.message)}", file=sys.stderr)
+        return risk_mod.EXIT_ERROR
+    except FetchError as exc:
+        print(f"error: {sanitize_text(exc.message)}", file=sys.stderr)
+        return risk_mod.EXIT_ERROR
+    except KeyboardInterrupt:
+        return risk_mod.EXIT_ERROR
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return risk_mod.EXIT_ERROR
+
+
+if __name__ == "__main__":
+    sys.exit(main())
