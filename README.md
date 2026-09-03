@@ -6,7 +6,7 @@
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-173%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-192%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
@@ -49,6 +49,7 @@ gets out of the way. It never decides that something is safe.
 - [Architecture](#-architecture)
 - [The risk model](#-the-risk-model)
 - [CLI usage](#-cli-usage)
+- [Version diff](#-version-diff)
 - [JSON and CI](#-json-and-ci)
 - [Install](#-install)
 - [The Claude Code skill](#-the-claude-code-skill)
@@ -116,6 +117,7 @@ AI agent, on hostile input*.
 | **Provenance** | registry/source mismatch, missing repository, remote-only servers |
 | **Repository trust** | archived, disabled, fork, licence, releases, staleness |
 | **Popularity integrity** | the original star/fork/age relationship |
+| **Version drift** | capability, credentials or destinations a new release gained |
 
 The **combinations** are where the value is. `requests` being imported is noise.
 `os.environ` read on line 12 and an outbound POST on line 19 of the same file is
@@ -221,6 +223,7 @@ mcp_vet/
   popularity.py     the original star/fork/age heuristic
   risk.py           synthesis, recommendations, exit codes
   report.py         text and JSON rendering
+  diff.py           what capability a new version gained
   cli.py            commands and exit codes
 ```
 
@@ -285,6 +288,10 @@ mcp-vet audit owner/repo --path ./checkout --verbose
 # Fully offline - no network at all
 mcp-vet audit --offline --path ./checkout
 
+# What did this release gain? (the update nobody re-reads)
+mcp-vet diff owner/repo v1.2.0 v1.3.0
+mcp-vet diff --before-path ./v1.2.0 --after-path ./v1.3.0
+
 # Machine-readable
 mcp-vet report owner/repo --path ./checkout > report.json
 ```
@@ -304,6 +311,43 @@ that decision stays with you.
 Standard library only. An auditing tool that pulls in a dependency tree to run
 is asking you to trust more code in order to check less of it. Set
 `GITHUB_TOKEN` (or `GH_TOKEN`) to raise the API rate limit; no token is required.
+
+---
+
+## 🔀 Version diff
+
+The most dangerous MCP update is not the one that arrives malicious. It is the
+one that was fine at `v1.2.0`, got read and approved, and quietly grew shell
+execution at `v1.3.0`. Nobody re-reads a patch bump.
+
+```bash
+mcp-vet diff owner/repo v1.2.0 v1.3.0
+```
+
+```text
+Capabilities gained
+  + environment.read
+  + process.spawn
+  + shell.execute
+
+Credentials newly requested
+  + GITHUB_TOKEN
+
+Network destinations added
+  + telemetry-collect.example.net
+
+  [HIGH/MEDIUM confidence] New capability since v1.2.0: shell.execute
+      v1.3.0 can do something v1.2.0 could not...
+```
+
+Exits non-zero when a version gains capability, so it can gate an automated
+dependency bump. Dropped capabilities are reported too — a server that stops
+needing your token is worth knowing about.
+
+Against two git refs it fetches only the files the compare API reports as
+changed, which keeps an audit to a handful of requests; the trade-off is that a
+finding whose halves sit in unchanged files will not appear, and the report says
+so. Against two local checkouts both trees are analysed in full.
 
 ---
 
@@ -386,7 +430,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**173 tests**, no network access in any of them. Beyond the analyzers, one
+**192 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:

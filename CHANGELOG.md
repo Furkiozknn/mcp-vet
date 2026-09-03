@@ -30,7 +30,10 @@ security signal was the most misleading thing about the previous version.
 - **Risk model** (`risk.py`) — per-area severities with no single score;
   severity separate from confidence; `Status` distinguishing "checked and
   found nothing" from "could not check".
-- **New commands** — `audit`, `report`, `registry`; `--json`, `--offline`,
+- **Version diff** (`diff.py`) — `mcp-vet diff owner/repo v1.2.0 v1.3.0` reports
+  capability, credentials and destinations a release gained, and exits non-zero
+  so it can gate an automated bump.
+- **New commands** — `audit`, `report`, `registry`, `diff`; `--json`, `--offline`,
   `--verbose`, `--quiet`, `--path`, `--purpose`.
 - **Stable exit codes** — 0/1/2/3 by severity, 4 for tool error, documented and
   tested so `mcp-vet audit` can gate CI.
@@ -59,7 +62,7 @@ security signal was the most misleading thing about the previous version.
 
 ### Tests
 
-30 → 173. Every original assertion is preserved. New: analyzer coverage,
+30 → 192. Every original assertion is preserved. New: analyzer coverage,
 mocked registry, exit-code and JSON contracts, and `test_hostile_input.py`,
 which treats mcp-vet itself as the attack surface.
 

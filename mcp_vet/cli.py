@@ -27,6 +27,7 @@ import argparse
 import sys
 from typing import List, Optional
 
+from . import diff as diff_mod
 from . import registry as registry_mod
 from . import risk as risk_mod
 from .audit import audit_directory, audit_repository
@@ -149,9 +150,59 @@ def cmd_report(args: argparse.Namespace) -> int:
     return cmd_audit(args)
 
 
+class _Subparsers:
+    """add_parser() wrapper that keeps allow_abbrev=False on every subcommand.
+
+    argparse does not propagate it, so each subparser has to opt out again.
+    """
+
+    def __init__(self, parser: argparse.ArgumentParser):
+        self._sub = parser.add_subparsers(dest="command", required=True)
+
+    def add_parser(self, name: str, **kwargs) -> argparse.ArgumentParser:
+        kwargs.setdefault("allow_abbrev", False)
+        return self._sub.add_parser(name, **kwargs)
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Compare two versions and report capability the newer one gained."""
+    if args.before_path or args.after_path:
+        if not (args.before_path and args.after_path):
+            print("error: --before-path and --after-path must be given together",
+                  file=sys.stderr)
+            return risk_mod.EXIT_ERROR
+        # Label each side by its directory name, which is what a reader
+        # recognises, rather than inventing "before"/"after".
+        import os
+
+        result = diff_mod.diff_local(
+            args.before_path, args.after_path,
+            before_ref=args.before or os.path.basename(os.path.abspath(args.before_path)),
+            after_ref=args.after or os.path.basename(os.path.abspath(args.after_path)),
+        )
+    else:
+        if not (args.repo and args.before and args.after):
+            print("error: diff needs <owner>/<repo> <before-ref> <after-ref>, "
+                  "or --before-path and --after-path", file=sys.stderr)
+            return risk_mod.EXIT_ERROR
+        result = diff_mod.diff_refs(args.repo, args.before, args.after)
+
+    print(diff_mod.render(result))
+    # An upgrade that adds capability exits non-zero so it can gate an
+    # automated bump, using the worst finding's severity.
+    if not result.findings:
+        return risk_mod.EXIT_CLEAN
+    worst = max(f.severity for f in result.findings)
+    return risk_mod.exit_code_for(worst)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcp-vet",
+        # Prefix matching is off deliberately: with it on, `--before` silently
+        # resolves to `--before-path`, and a mistyped flag in a security tool
+        # should fail loudly rather than mean something else.
+        allow_abbrev=False,
         description=(
             "Evidence-gathering for MCP servers. Collects what a server can do, what "
             "credentials it wants, where it can send data, and what its provenance is - "
@@ -163,7 +214,7 @@ def build_parser() -> argparse.ArgumentParser:
             "4 mcp-vet could not complete."
         ),
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = _Subparsers(parser)
 
     p_search = sub.add_parser("search", help="Find candidate servers on GitHub")
     p_search.add_argument("query", help='e.g. "discord mcp"')
@@ -190,6 +241,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--verbose", action="store_true", help="include snippets and area summaries")
     p_audit.add_argument("--quiet", action="store_true", help="verdict line only")
     p_audit.set_defaults(func=cmd_audit)
+
+    p_diff = sub.add_parser(
+        "diff",
+        help="Compare two versions: what capability did the newer one gain?",
+    )
+    p_diff.add_argument("repo", nargs="?", help="owner/repo")
+    p_diff.add_argument("before", nargs="?", help="earlier ref, e.g. v1.2.0")
+    p_diff.add_argument("after", nargs="?", help="later ref, e.g. v1.3.0")
+    p_diff.add_argument("--before-path", help="local checkout of the earlier version")
+    p_diff.add_argument("--after-path", help="local checkout of the later version")
+    p_diff.set_defaults(func=cmd_diff)
 
     p_report = sub.add_parser("report", help="Audit, emitting JSON by default")
     p_report.add_argument("repo", nargs="?", help="owner/repo")

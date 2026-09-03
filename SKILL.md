@@ -151,6 +151,18 @@ Where the tool reports a data flow, follow it: open the file, and decide
 whether the value read is actually the value sent. Report what you conclude,
 not what the tool guessed.
 
+### Upgrading an already-installed server?
+
+Then the question is narrower: what did this version gain?
+
+```bash
+uv run python scripts/vet.py diff <owner>/<repo> <old-version> <new-version>
+```
+
+New capability, new credentials or new destinations in a release are the
+changes worth reading, because the earlier review did not cover them. Nobody
+re-reads a patch bump — this is the step that makes that safe to admit.
+
 ## Step 7 — Synthesise and present the evidence
 
 Give the user:
