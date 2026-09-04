@@ -47,6 +47,7 @@ it is the part that tells you how much the rest is worth.
 | GitHub API responses | Untrusted text. Sanitized before display. |
 | MCP Registry responses | Untrusted text. Sanitized before display. |
 | `GITHUB_TOKEN` | Read from the environment, sent only to `api.github.com`. |
+| Response cache (`~/.cache/mcp-vet/`) | Holds URLs, ETags and JSON bodies only — never the token or any request header. Files `0600` in a `0700` directory; `MCP_VET_CACHE=0` disables it. |
 
 ---
 

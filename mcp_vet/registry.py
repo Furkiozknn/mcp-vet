@@ -22,6 +22,7 @@ anomaly, and it is reported as a limitation rather than an accusation.
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -38,6 +39,11 @@ from .models import (
 from .scanning import sanitize_text
 
 REGISTRY_API = "https://registry.modelcontextprotocol.io"
+# A search the registry has not cached itself took 5-9 s at a quiet hour and
+# 20-50 s under load (measured September 2026); the shared 15 s default turned
+# a slow-but-answering registry into a silent "not found". Provenance is worth
+# waiting for, the terms are in flight together, and the answer is cached.
+REGISTRY_TIMEOUT = 60
 OFFICIAL_META_KEY = "io.modelcontextprotocol.registry/official"
 
 
@@ -153,14 +159,14 @@ def search(query: str, limit: int = 20) -> List[RegistryServer]:
     collected: List[RegistryServer] = []
     seen_names = set()
 
-    for term in terms[:4]:
-        params = encode_query({"search": term, "limit": min(100, max(limit * 3, 30))})
-        try:
-            data = get_json(f"{REGISTRY_API}/v0/servers?{params}")
-        except FetchError:
+    pages = _search_pages(terms[:4], min(100, max(limit * 3, 30)))
+    failures = [err for _, err in pages if err is not None]
+    if failures and len(failures) == len(pages):
+        raise failures[0]
+    for data, _ in pages:
+        if data is None:
             continue
-        entries = data.get("servers", []) if isinstance(data, dict) else []
-        for entry in entries:
+        for entry in data.get("servers") or []:
             if not isinstance(entry, dict):
                 continue
             server = _parse_server(entry)
@@ -199,13 +205,9 @@ def find_by_repository(repo_url: str, candidates_per_term: int = 100) -> Optiona
         return None
     _, owner, name = normalized.split("/", 2)
 
-    for term in _search_terms(owner, name):
-        params = encode_query({"search": term, "limit": min(100, candidates_per_term)})
-        try:
-            data = get_json(f"{REGISTRY_API}/v0/servers?{params}")
-        except FetchError:
-            continue
-        if not isinstance(data, dict):
+    pages = _search_pages(_search_terms(owner, name), min(100, candidates_per_term))
+    for data, _ in pages:
+        if data is None:
             continue
         for entry in data.get("servers") or []:
             if not isinstance(entry, dict):
@@ -213,7 +215,47 @@ def find_by_repository(repo_url: str, candidates_per_term: int = 100) -> Optiona
             server = _parse_server(entry)
             if server.repository_url and _normalize_repo(server.repository_url) == normalized:
                 return server
+    failures = [err for _, err in pages if err is not None]
+    if failures:
+        # "Could not search" must never read as "searched and found nothing":
+        # UNAVAILABLE is not the same as clean. The caller marks provenance
+        # unavailable rather than absent.
+        first = failures[0]
+        raise FetchError(
+            f"registry search failed for {len(failures)} of {len(pages)} terms: {first.message}",
+            status=first.status, url=first.url,
+        )
     return None
+
+
+def _search_pages(terms: List[str], limit: int) -> List[Tuple[Optional[Dict[str, Any]], Optional[FetchError]]]:
+    """One registry search per term, in flight together, results in term order.
+
+    Measured September 2026 with fresh terms, twice: at a quiet hour three
+    sequential searches took 11.8 s of wall time and three concurrent ones
+    3.4 s; under load, 130 s sequential against 24 s concurrent, with the
+    per-query latency *lower* in the concurrent run - the registry's cost is
+    per query and it serves queries in parallel without contention. They
+    go out together - at most four threads, one per term - and come back in
+    term order, so which entry wins a lookup does not depend on which request
+    finished first and the report stays byte-stable. Each element is
+    (page, None) or (None, error): a term that failed is reported, never
+    quietly treated as "no entry". GitHub calls are deliberately not treated
+    this way: GitHub asks for serial requests.
+    """
+
+    def fetch(term: str) -> Tuple[Optional[Dict[str, Any]], Optional[FetchError]]:
+        params = encode_query({"search": term, "limit": limit})
+        try:
+            data = get_json(f"{REGISTRY_API}/v0/servers?{params}", timeout=REGISTRY_TIMEOUT)
+        except FetchError as exc:
+            return None, exc
+        return (data if isinstance(data, dict) else None), None
+
+    if len(terms) <= 1:
+        return [fetch(term) for term in terms]
+    with ThreadPoolExecutor(max_workers=len(terms), thread_name_prefix="mcp-vet-registry") as pool:
+        return list(pool.map(fetch, terms))
 
 
 def _search_terms(owner: str, name: str) -> List[str]:

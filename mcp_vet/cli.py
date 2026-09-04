@@ -32,6 +32,7 @@ from . import registry as registry_mod
 from . import risk as risk_mod
 from .audit import audit_directory, audit_repository
 from .github import fetch_repo, search_repos
+from . import http as http_mod
 from .http import FetchError, NotFound, RateLimited
 from .popularity import assess as popularity_assess
 from .popularity import age_days, fork_ratio, is_suspicious
@@ -196,6 +197,16 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return risk_mod.exit_code_for(worst)
 
 
+def _network_flags() -> argparse.ArgumentParser:
+    """Flags shared by every command that talks to GitHub or the registry."""
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument(
+        "--no-cache", action="store_true",
+        help="ignore the local response cache and ask GitHub and the registry directly",
+    )
+    return parent
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcp-vet",
@@ -215,22 +226,23 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sub = _Subparsers(parser)
+    net = _network_flags()
 
-    p_search = sub.add_parser("search", help="Find candidate servers on GitHub")
+    p_search = sub.add_parser("search", parents=[net], help="Find candidate servers on GitHub")
     p_search.add_argument("query", help='e.g. "discord mcp"')
     p_search.add_argument("--limit", type=int, default=10)
     p_search.set_defaults(func=cmd_search)
 
-    p_registry = sub.add_parser("registry", help="Search the official MCP Registry")
+    p_registry = sub.add_parser("registry", parents=[net], help="Search the official MCP Registry")
     p_registry.add_argument("query", help='e.g. "discord"')
     p_registry.add_argument("--limit", type=int, default=10)
     p_registry.set_defaults(func=cmd_registry)
 
-    p_check = sub.add_parser("check", help="Metadata-only look at one repository")
+    p_check = sub.add_parser("check", parents=[net], help="Metadata-only look at one repository")
     p_check.add_argument("repo", help="owner/repo")
     p_check.set_defaults(func=cmd_check)
 
-    p_audit = sub.add_parser("audit", help="Full analysis of one server")
+    p_audit = sub.add_parser("audit", parents=[net], help="Full analysis of one server")
     p_audit.add_argument("repo", nargs="?", help="owner/repo")
     p_audit.add_argument("--path", help="local checkout to analyze (source analysis needs this)")
     p_audit.add_argument("--offline", action="store_true",
@@ -244,6 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_diff = sub.add_parser(
         "diff",
+        parents=[net],
         help="Compare two versions: what capability did the newer one gain?",
     )
     p_diff.add_argument("repo", nargs="?", help="owner/repo")
@@ -253,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_diff.add_argument("--after-path", help="local checkout of the later version")
     p_diff.set_defaults(func=cmd_diff)
 
-    p_report = sub.add_parser("report", help="Audit, emitting JSON by default")
+    p_report = sub.add_parser("report", parents=[net], help="Audit, emitting JSON by default")
     p_report.add_argument("repo", nargs="?", help="owner/repo")
     p_report.add_argument("--path")
     p_report.add_argument("--offline", action="store_true")
@@ -268,8 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "no_cache", False):
+        http_mod.set_cache_enabled(False)
+    network_before = http_mod.cache_stats()
     try:
-        return args.func(args)
+        code = args.func(args)
     except NotFound as exc:
         print(f"error: not found - {sanitize_text(exc.message)}", file=sys.stderr)
         return risk_mod.EXIT_ERROR
@@ -284,6 +300,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     except OSError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return risk_mod.EXIT_ERROR
+    finally:
+        # The override must not outlive one invocation: main() is re-entrant
+        # for tests and for anyone embedding the CLI.
+        http_mod.set_cache_enabled(None)
+
+    # audit and report carry this inside the report, where a JSON consumer can
+    # read it; the human-facing commands get one line after their output.
+    if args.command in ("search", "registry", "check", "diff"):
+        stats = http_mod.cache_stats().since(network_before)
+        if stats.hits:
+            print(
+                f"Note: {stats.hits} response(s) came from the local cache (the oldest is "
+                f"{http_mod.age_text(stats.oldest_seconds)}). Use --no-cache for live answers."
+            )
+    return code
 
 
 if __name__ == "__main__":
