@@ -42,10 +42,17 @@ jobs:
       - name: Install
         run: pip install -e .
 
+      # Every step below captures the exit code before asserting on it.
+      # mcp-vet exits non-zero by severity *on purpose*, and these steps run
+      # under `bash -e`, so a bare invocation would abort the step before its
+      # assertion ever ran - which is exactly how the `report` step failed.
       - name: Clean fixture must exit 0
         run: |
-          mcp-vet audit --offline --path tests/fixtures/clean_server
-          test $? -eq 0
+          set +e
+          mcp-vet audit --offline --path tests/fixtures/clean_server >/dev/null
+          code=$?
+          set -e
+          test "$code" -eq 0 || { echo "expected exit 0, got $code"; exit 1; }
 
       - name: Exfiltration fixture must exit 2 (HIGH)
         run: |
@@ -71,14 +78,28 @@ jobs:
           set -e
           test "$code" -eq 4 || { echo "expected exit 4, got $code"; exit 1; }
 
+      # `report` is `audit` with JSON output, so it carries the same
+      # severity exit code - 2 here, because the fixture is a HIGH finding.
+      # The JSON on stdout is still complete and must still parse.
       - name: JSON output must parse and carry a schema version
         run: |
+          set +e
           mcp-vet report --offline --path tests/fixtures/exfil_server > report.json
+          code=$?
+          set -e
+          test "$code" -eq 2 || { echo "expected exit 2 from report, got $code"; exit 1; }
           python3 -c "import json; d=json.load(open('report.json')); assert d['schema_version']; assert d['findings']"
 
+      # The hostile fixture carries injection text in its README, so this
+      # audit legitimately exits 1. What is being asserted is the output, not
+      # the code.
       - name: Report must contain no terminal escape sequences
         run: |
+          set +e
           mcp-vet audit --offline --path tests/fixtures/hostile_text --verbose > out.txt
+          code=$?
+          set -e
+          test "$code" -le 3 || { echo "audit failed to run, exit $code"; exit 1; }
           python3 -c "
           data = open('out.txt', 'rb').read()
           for bad in (b'\x1b', b'\x00', b'\x07'):
