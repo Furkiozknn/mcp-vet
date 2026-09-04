@@ -219,6 +219,7 @@ mcp_vet/
   network.py        destination extraction and classification
   registry.py       official MCP Registry + provenance chain
   github.py         read-only GitHub client
+  http.py           the one GET; private on-disk cache, ETag revalidation
   trust.py          repository trust and maintenance
   popularity.py     the original star/fork/age heuristic
   risk.py           synthesis, recommendations, exit codes
@@ -292,6 +293,9 @@ mcp-vet audit --offline --path ./checkout
 mcp-vet diff owner/repo v1.2.0 v1.3.0
 mcp-vet diff --before-path ./v1.2.0 --after-path ./v1.3.0
 
+# Ask the servers directly, ignoring the local response cache
+mcp-vet audit owner/repo --path ./checkout --no-cache
+
 # Machine-readable
 mcp-vet report owner/repo --path ./checkout > report.json
 ```
@@ -311,6 +315,41 @@ that decision stays with you.
 Standard library only. An auditing tool that pulls in a dependency tree to run
 is asking you to trust more code in order to check less of it. Set
 `GITHUB_TOKEN` (or `GH_TOKEN`) to raise the API rate limit; no token is required.
+
+### ⚡ Response cache
+
+An audit is network-bound, and the network is mostly the MCP Registry.
+Measured on 4 September 2026: the four GitHub calls of an audit took about a
+second between them; one registry search the registry had not cached on its
+own side took 5–9 s at a quiet hour and 20–50 s under load; a provenance lookup
+runs three. So the three searches go out together (fresh-term A/B: 11.8 s → 3.4 s
+at a quiet hour, 130 s → 24 s under load), and every response is cached under
+`~/.cache/mcp-vet/` (`XDG_CACHE_HOME` respected):
+
+| `mcp-vet audit Furkiozknn/mcp-vet --path .` | wall time | requests |
+|---|---|---|
+| first run, registry under load | 55.2 s | 7 |
+| first run, registry answering from its own cache | 8.3 s | 7 |
+| any run within the hour after | 0.23 s | 0 |
+
+The cache is a speed-up with an audit trail, never a source of truth:
+
+- a body is reused without asking the server for `MCP_VET_CACHE_TTL` seconds
+  (default 3600), and **every report says so** under *What this did not check*,
+  with the age of the oldest cached answer; `notes.network` in the JSON carries
+  the counts;
+- after that a GitHub body is revalidated with `If-None-Match`, and a `304` costs
+  no rate-limit budget (measured: three 304s and one GET spent one point), which
+  matters most without a token, at 60 requests an hour;
+- only URLs, ETags and JSON bodies are stored, never a request header, so
+  `GITHUB_TOKEN` never touches disk; entries are `0600` in a `0700` directory;
+- errors, 404s and malformed bodies are never cached; a corrupt entry is deleted,
+  not trusted;
+- a registry search that fails is reported as *unavailable*, never as "no entry
+  found".
+
+`--no-cache` on any network command, or `MCP_VET_CACHE=0`, asks the servers
+directly; `MCP_VET_CACHE_DIR` moves the directory.
 
 ---
 
@@ -430,7 +469,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**192 tests**, no network access in any of them. Beyond the analyzers, one
+**237 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:
@@ -462,6 +501,9 @@ Stated on **every report**, not only here:
 - **Binaries and minified bundles are not analysed.**
 - **Skipped files are reported**, because an attacker who knows the limits would
   otherwise hide past them.
+- **A cached answer is not a live one.** When metadata came from the local
+  response cache, the report says so and how old it is; `--no-cache` asks the
+  servers directly.
 
 **mcp-vet flags itself `CRITICAL`.** Deliberately, and it is left that way:
 its rule catalogue contains the patterns it searches for, its fixtures are

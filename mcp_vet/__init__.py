@@ -22,7 +22,7 @@ from .models import (  # noqa: F401
     SCHEMA_VERSION,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = [
     "Area", "AuditReport", "Capability", "Confidence", "CredentialRequirement",
     "DataFlow", "Evidence", "Finding", "NetworkEndpoint", "Severity", "Status",

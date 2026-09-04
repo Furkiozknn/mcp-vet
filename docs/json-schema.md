@@ -33,6 +33,11 @@ added. Consumers should tolerate unknown fields.
 | `limitations` | array of string | What this run did not check |
 | `notes` | object | Free-form context; not scored on |
 
+`notes.network` (0.5.0+) records `requests` (round trips, failed ones included),
+`cache_hits` (answers served without asking a server — the only ones that can be
+stale), `revalidated` (confirmed current by a `304`) and `cache_oldest_seconds`.
+A consumer that needs live data checks `cache_hits == 0`, or runs with `--no-cache`.
+
 ## Enumerations
 
 **severity** — `NOT_FLAGGED`, `INFO`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.

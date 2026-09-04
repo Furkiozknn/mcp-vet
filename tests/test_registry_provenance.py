@@ -1,6 +1,7 @@
 """MCP Registry integration and the provenance chain. All HTTP is mocked."""
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 import pytest
@@ -160,3 +161,102 @@ class TestProvenance:
         assert assessment.status is Status.UNAVAILABLE
         assert "not evidence either way" in assessment.summary
         assert findings == []
+
+
+class TestLookupConcurrency:
+    """A provenance lookup's search terms go out together, results stay in term order."""
+
+    def test_terms_are_fetched_together(self, monkeypatch):
+        seen = []
+
+        def slow_get_json(url, **kwargs):
+            seen.append(url)
+            time.sleep(0.15)
+            return {"servers": [], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", slow_get_json)
+        started = time.perf_counter()
+        assert registry.find_by_repository("https://github.com/acme/widget-mcp") is None
+        elapsed = time.perf_counter() - started
+        assert len(seen) == 3                       # widget, widget-mcp, acme
+        assert elapsed < 0.15 * 3                   # not one after the other
+
+    def test_the_earliest_term_wins_even_when_it_answers_last(self, monkeypatch):
+        def get_json(url, **kwargs):
+            if "search=widget&" in url:             # the first term, made the slowest
+                time.sleep(0.2)
+                return {"servers": [entry(version="1.0.0")], "metadata": {}}
+            if "search=acme&" in url:
+                return {"servers": [entry(version="9.9.9")], "metadata": {}}
+            return {"servers": [], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        found = registry.find_by_repository("https://github.com/acme/widget-mcp")
+        assert found is not None and found.version == "1.0.0"
+
+    def test_one_unreachable_term_does_not_lose_the_others(self, monkeypatch):
+        def get_json(url, **kwargs):
+            if "search=widget&" in url:
+                raise FetchError("registry timed out")
+            if "search=acme&" in url:
+                return {"servers": [entry()], "metadata": {}}
+            return {"servers": [], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        found = registry.find_by_repository("https://github.com/acme/widget-mcp")
+        assert found is not None and found.name == "ai.acme/widget"
+
+    def test_a_single_term_search_uses_no_threads(self, monkeypatch):
+        import threading
+        callers = []
+
+        def get_json(url, **kwargs):
+            callers.append(threading.current_thread().name)
+            return {"servers": [entry()], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        registry.search("widget", limit=5)
+        assert callers == [threading.main_thread().name]
+
+    def test_registry_search_merges_terms_in_term_order(self, monkeypatch):
+        def get_json(url, **kwargs):
+            if "search=discord&" in url:
+                time.sleep(0.1)
+                return {"servers": [entry(name="ai.a/discord", description="chat")], "metadata": {}}
+            return {"servers": [entry(name="ai.b/control", description="chat control")], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        results = registry.search("discord control", limit=5)
+        # Both match one term in name+description; the tie breaks on name, not arrival.
+        assert [s.name for s in results] == ["ai.a/discord", "ai.b/control"]
+
+    def test_a_failed_term_with_no_match_is_unavailable_not_absent(self, monkeypatch):
+        def get_json(url, **kwargs):
+            if "search=widget&" in url:
+                raise FetchError("registry timed out", url=url)
+            return {"servers": [], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        with pytest.raises(FetchError) as excinfo:
+            registry.find_by_repository("https://github.com/acme/widget-mcp")
+        assert "1 of 3 terms" in str(excinfo.value)
+
+    def test_registry_search_with_every_term_failing_raises(self, monkeypatch):
+        def get_json(url, **kwargs):
+            raise FetchError("down", url=url)
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        with pytest.raises(FetchError):
+            registry.search("discord control", limit=5)
+
+    def test_registry_searches_wait_longer_than_github_calls(self, monkeypatch):
+        seen = {}
+
+        def get_json(url, **kwargs):
+            seen["timeout"] = kwargs.get("timeout")
+            return {"servers": [], "metadata": {}}
+
+        monkeypatch.setattr(registry, "get_json", get_json)
+        registry.search("widget", limit=5)
+        assert seen["timeout"] == registry.REGISTRY_TIMEOUT == 60
+

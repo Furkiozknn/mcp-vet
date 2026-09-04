@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.5.0 — Faster, and honest about where the answers came from
+
+Measured before the change: an audit was 17–28 s of wall time, 99 % of it
+waiting on seven HTTP requests — three of them MCP Registry searches at 5–9 s
+each at a quiet hour and 20–50 s under load.
+
+### Added
+
+- **On-disk response cache** (`http.py`). GitHub and registry responses are
+  kept under `~/.cache/mcp-vet/` for `MCP_VET_CACHE_TTL` seconds (default one
+  hour), then revalidated with `If-None-Match`; a GitHub `304` costs no
+  rate-limit budget (measured: three 304s and one GET spent one point). Every
+  report lists cached answers under *What this did not check* with the age of
+  the oldest, and `notes.network` carries the counts. Only URLs, ETags and
+  bodies are stored — never a request header — as `0600` files in a `0700`
+  directory; errors, 404s and malformed bodies are never cached. `--no-cache`
+  on every network command, `MCP_VET_CACHE=0` and `MCP_VET_CACHE_DIR` control it.
+
+### Changed
+
+- **Registry lookups run their search terms together** (`registry.py`), with
+  results kept in term order so the report stays byte-stable. Fresh-term A/B:
+  11.8 s → 3.4 s at a quiet hour, 130 s → 24 s under load, with lower
+  per-query latency in the concurrent run. GitHub calls stay serial, as
+  GitHub asks.
+- **Registry timeout is 60 s** (was the shared 15 s), and a search that fails
+  is reported as *unavailable* instead of being read as "no entry found" —
+  "could not look" and "found nothing" must never share an answer.
+
+### Measured
+
+| `mcp-vet audit Furkiozknn/mcp-vet --path .` | wall time | requests |
+|---|---|---|
+| first run, registry under load | 55.2 s | 7 |
+| first run, registry answering from its own cache | 8.3 s | 7 |
+| any run within the hour after | 0.23 s | 0 |
+
+Tests: 192 → 237.
+
 ## 0.4.0 — MCP Trust & Security Auditor
 
 The project stops being a GitHub search with a popularity heuristic and becomes

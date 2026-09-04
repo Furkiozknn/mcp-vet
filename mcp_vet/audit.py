@@ -26,6 +26,7 @@ from . import registry as registry_mod
 from . import risk as risk_mod
 from . import source as source_mod
 from . import trust as trust_mod
+from . import http as http_mod
 from .github import RepoExtras, RepoMeta, fetch_extras, fetch_repo
 from .http import FetchError
 from .models import (
@@ -160,6 +161,7 @@ def audit_repository(
     checkout is supplied - mcp-vet does not clone, by design, so that decision
     stays with the person running it.
     """
+    network_before = http_mod.cache_stats()
     meta: RepoMeta = fetch_repo(owner_repo)
     report = AuditReport(target=meta.full_name, source_url=meta.html_url)
     purpose = f"{meta.full_name} {meta.description or ''} {' '.join(meta.topics)}"
@@ -248,4 +250,26 @@ def audit_repository(
             "which is the part that decides whether this is safe to run."
         )
 
+    _network_notes(report, http_mod.cache_stats().since(network_before))
     return risk_mod.finalize(report)
+
+
+def _network_notes(report: AuditReport, stats: http_mod.CacheStats) -> None:
+    """Say where the metadata came from. A cached answer is not a live one.
+
+    Revalidated bodies were confirmed current by the server, so only plain
+    cache hits - served without asking - are listed as a limitation.
+    """
+    report.notes["network"] = {
+        "requests": stats.requests,
+        "cache_hits": stats.hits,
+        "revalidated": stats.revalidated,
+        "cache_oldest_seconds": int(stats.oldest_seconds),
+    }
+    if stats.hits:
+        report.limitations.append(
+            f"{stats.hits} of {stats.hits + stats.requests} API responses came from the "
+            f"local cache (the oldest is {http_mod.age_text(stats.oldest_seconds)}), so "
+            "repository metadata and registry provenance may lag by that much. "
+            "Run with --no-cache for live answers."
+        )
