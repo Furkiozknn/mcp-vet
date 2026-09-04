@@ -1,15 +1,32 @@
 [project]
 name = "mcp-vet"
-version = "0.3.0"
-description = "Standalone CLI + Claude Code skill for vetting MCP servers before install"
+version = "0.4.0"
+description = "Trust and security auditing for MCP servers: capabilities, credentials, data flow, dependencies, provenance"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
+# Standard library only, deliberately. An auditing tool that pulls in a
+# dependency tree to run is asking you to trust more code in order to check
+# less of it.
 dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
+[project.scripts]
+mcp-vet = "mcp_vet.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Furkiozknn/mcp-vet"
+Security = "https://github.com/Furkiozknn/mcp-vet/blob/master/SECURITY.md"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["mcp_vet"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-pythonpath = ["scripts"]
+pythonpath = ["."]
