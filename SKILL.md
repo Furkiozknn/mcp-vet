@@ -1,11 +1,11 @@
 ---
 name: mcp-vet
-description: Discover, audit and safely install MCP servers. Searches GitHub and the official MCP Registry, then analyses the actual source - capabilities, credentials, network destinations, data flows, dependencies, install scripts and tool-poisoning patterns - and presents evidence before anything is installed. Use when the user asks "is there an MCP for X", "find me an MCP server that does Y", "is this MCP safe", "audit this MCP", "kur mcp", "hangi MCP var", "bana bir MCP bul", or wants to add a new MCP server.
+description: Discover, audit and install MCP servers with the evidence in view. Searches GitHub and the official MCP Registry, then analyses the actual source - capabilities, credentials, network destinations, data flows, dependencies, install scripts and tool-poisoning patterns - and presents evidence before anything is installed. Use when the user asks "is there an MCP for X", "find me an MCP server that does Y", "is this MCP safe", "audit this MCP", "kur mcp", "hangi MCP var", "bana bir MCP bul", or wants to add a new MCP server.
 license: MIT
 compatibility: Requires network access to github.com and registry.modelcontextprotocol.io for the online steps; `--offline` works with no network. Prefers `uv` to run the bundled scripts/vet.py (no bare `python3` assumed on PATH); falls back to the `gh` CLI for metadata if neither is available.
 ---
 
-# MCP Vet — discover, audit, and safely install MCP servers
+# MCP Vet — discover, audit, and install MCP servers with evidence in view
 
 Installing an MCP server means running someone else's code with access to your
 files, your tools, and whatever credentials you hand it. This skill exists to
