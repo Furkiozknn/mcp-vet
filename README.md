@@ -6,7 +6,7 @@
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-192%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-237%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
