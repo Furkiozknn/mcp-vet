@@ -62,6 +62,8 @@ gets out of the way. It never decides that something is safe.
 
 ## 🤔 Why MCP security is different
 
+<img src="assets/comparison.svg" alt="Sorting by stars versus vetting properly - star count alone hides inflation, skips the source read, and installs the first result; vetting cross-checks stars against forks and age, reads every executable file, and gates the install behind explicit approval" width="100%">
+
 Installing a library means running its code when you call it. Installing an
 **MCP server** means handing an autonomous agent a set of tools and then letting
 a language model decide when to use them. Three things follow:
@@ -244,6 +246,10 @@ code are three views of one object, so they cannot drift apart.
 ---
 
 ## ⚖️ The risk model
+
+<img src="assets/heuristic.svg" alt="The popularity-integrity heuristic: a repo is flagged only where all three conditions overlap - more than 3000 stars, younger than 180 days, and a forks-to-stars ratio below 0.12. Matching one or two is normal." width="100%">
+
+<sub>The one inherited heuristic, and deliberately not a security signal: the flag is disclosed, never folded into a score.</sub>
 
 **There is no single score.** Each area keeps its own severity; the overall
 verdict is the *worst* of them, never the mean. A server can be well
@@ -444,6 +450,8 @@ project-only scope. No dependencies to install, no build step.
 ---
 
 ## 🧠 The Claude Code skill
+
+<img src="assets/pipeline.svg" alt="The vetting pipeline: clarify the need, search GitHub, vet the heuristic, rank the top two or three, review the source, then install only with explicit approval - nothing is written to .mcp.json or the skills directory until you say go" width="100%">
 
 `SKILL.md` drives the full ten-step workflow: clarify → discover → provenance →
 repository trust → present candidates → **audit the source** → synthesise →
