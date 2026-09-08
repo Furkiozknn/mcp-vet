@@ -84,6 +84,18 @@ class TestExitCodes:
         assert main(["check", "acme/widget"]) == risk.EXIT_ERROR
         assert "GITHUB_TOKEN" in capsys.readouterr().err
 
+    @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_malformed_repo_response_exits_four_with_no_traceback(self, urlopen, capsys):
+        # An empty-but-valid JSON body from GitHub reached RepoMeta.from_github_json
+        # as a bare dict and crashed with KeyError, which argparse's caller never
+        # catches - the process would exit non-zero anyway, but with a stack
+        # trace on stderr instead of the one-line message every other failure gets.
+        urlopen.return_value = mock_response({})
+        assert main(["check", "acme/widget"]) == risk.EXIT_ERROR
+        err = capsys.readouterr().err
+        assert err.startswith("error:")
+        assert "Traceback" not in err
+
 
 class TestNeverSaysSafe:
     def test_no_recommendation_uses_the_word_safe_affirmatively(self):

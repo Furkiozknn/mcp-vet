@@ -55,6 +55,12 @@ class RepoMeta:
 
     @classmethod
     def from_github_json(cls, data: dict) -> "RepoMeta":
+        if not isinstance(data, dict) or not data.get("full_name"):
+            # An empty body, a bare `{}`, or a shape GitHub never actually
+            # sends (a broken cache entry, a proxy's error page parsed as
+            # JSON) all land here. Better a clear message than a KeyError
+            # traceback for a field the caller never sees the name of.
+            raise FetchError("GitHub returned no usable repository data (empty or malformed response)")
         license_info = data.get("license") or {}
         owner = data.get("owner") or {}
         return cls(
@@ -63,8 +69,8 @@ class RepoMeta:
             html_url=data.get("html_url", f"https://github.com/{data['full_name']}"),
             stars=data.get("stargazers_count", 0) or 0,
             forks=data.get("forks_count", 0) or 0,
-            created_at=data["created_at"],
-            pushed_at=data["pushed_at"],
+            created_at=data.get("created_at") or "",
+            pushed_at=data.get("pushed_at") or "",
             archived=bool(data.get("archived", False)),
             license=sanitize_text(license_info.get("name")) or None if license_info else None,
             owner_type=owner.get("type"),

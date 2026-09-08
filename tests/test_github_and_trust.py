@@ -93,6 +93,21 @@ class TestNetworkLayer:
             fetch_repo("acme/widget")
 
     @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_empty_object_response_raises_fetcherror_not_keyerror(self, urlopen):
+        # A body that parses fine but is not a repository - `{}`, a stripped
+        # error page, a stale cache entry - used to reach `data["full_name"]`
+        # and crash with a raw KeyError instead of a message a caller can act on.
+        urlopen.return_value = mock_response({})
+        with pytest.raises(FetchError):
+            fetch_repo("acme/widget")
+
+    @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_null_response_raises_fetcherror_not_typeerror(self, urlopen):
+        urlopen.return_value = mock_response(None)
+        with pytest.raises(FetchError):
+            fetch_repo("acme/widget")
+
+    @patch("mcp_vet.http.urllib.request.urlopen")
     def test_extras_degrade_per_call_instead_of_failing_the_audit(self, urlopen):
         urlopen.side_effect = urllib.error.URLError("offline")
         extras = fetch_extras("acme/widget")
