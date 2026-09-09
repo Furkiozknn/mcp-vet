@@ -477,7 +477,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**240 tests**, no network access in any of them. Beyond the analyzers, one
+**244 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:

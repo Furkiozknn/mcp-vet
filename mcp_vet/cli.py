@@ -278,7 +278,35 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def harden_stdio() -> None:
+    """Keep a narrow console code page from killing the report.
+
+    On a Turkish Windows console (cp1254) `mcp-vet audit` died before
+    printing anything:
+
+        UnicodeEncodeError: 'charmap' codec can't encode characters
+        in position 9-70: character maps to <undefined>
+
+    The report's box-drawing and status glyphs are not in that table. An
+    auditor that refuses to print its findings because the terminal cannot
+    draw a line is worse than useless: the user reads it as "the tool is
+    broken" and skips the audit entirely.
+
+    `errors="replace"` rather than crashing, and rather than stripping the
+    glyphs at the source - a new glyph in a new rule would bring the same
+    failure straight back. Replacement characters cannot introduce terminal
+    escapes, so the "no escape sequences in output" guarantee in SECURITY.md
+    still holds.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError, OSError):
+            pass  # captured, piped or already-wrapped stream: leave it alone
+
+
 def main(argv: Optional[List[str]] = None) -> int:
+    harden_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     if getattr(args, "no_cache", False):

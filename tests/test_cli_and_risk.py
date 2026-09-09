@@ -204,3 +204,61 @@ class TestCliSurface:
     def test_report_command_defaults_to_json(self, capsys):
         main(["report", "--offline", "--path", fixture("clean_server")])
         json.loads(capsys.readouterr().out)
+
+
+class TestNarrowCodePage:
+    """A console that cannot draw the report's glyphs must cost a glyph, not
+    the report.
+
+    `mcp-vet audit` died on a Turkish Windows console (cp1254) before printing
+    anything - UnicodeEncodeError on the box-drawing rule under the heading.
+    An auditor that prints nothing is read as a broken tool, and the audit
+    gets skipped, which is the worst possible failure for this program.
+    """
+
+    @staticmethod
+    def _cp1254_stream():
+        import io
+
+        return io.TextIOWrapper(io.BytesIO(), encoding="cp1254", errors="strict", newline="")
+
+    def test_the_narrow_stream_really_does_raise(self):
+        """Prove the rest of this class is not vacuous."""
+        stream = self._cp1254_stream()
+        with pytest.raises(UnicodeEncodeError):
+            stream.write("─" * 10)
+            stream.flush()
+
+    def test_audit_survives_a_narrow_console(self, monkeypatch):
+        import sys
+
+        stream = self._cp1254_stream()
+        monkeypatch.setattr(sys, "stdout", stream)
+        monkeypatch.setattr(sys, "stderr", stream)
+        code = main(["audit", "--offline", "--path", fixture("clean_server")])
+        sys.stdout.flush()
+        assert code == 0
+        assert stream.encoding.lower() == "utf-8"
+
+    def test_narrow_console_does_not_change_the_exit_code(self, monkeypatch):
+        """Severity exit codes are the CI contract; hardening must not move them."""
+        import sys
+
+        stream = self._cp1254_stream()
+        monkeypatch.setattr(sys, "stdout", stream)
+        monkeypatch.setattr(sys, "stderr", stream)
+        assert main(["audit", "--offline", "--path", fixture("poisoned_server")]) == 3
+
+    def test_replacement_never_emits_an_escape_sequence(self, monkeypatch):
+        """SECURITY.md promises no terminal escapes in output; replacing an
+        unencodable glyph must not smuggle one in."""
+        import sys
+
+        stream = self._cp1254_stream()
+        monkeypatch.setattr(sys, "stdout", stream)
+        monkeypatch.setattr(sys, "stderr", stream)
+        main(["audit", "--offline", "--path", fixture("hostile_text"), "--verbose"])
+        sys.stdout.flush()
+        ham = stream.buffer.getvalue()
+        for kotu in (b"\x1b", b"\x00", b"\x07"):
+            assert kotu not in ham, f"escape sequence leaked: {kotu!r}"
