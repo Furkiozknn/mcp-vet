@@ -1,0 +1,26 @@
+# Bagimlilik guncellemelerini haftalik olarak otomatik acar.
+# mcp-vet bir guvenlik denetim araci; kendi bagimliliklarinin guncel
+# kalmasi bu depo icin ozellikle onemli.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "bagimlilik"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "ci"
