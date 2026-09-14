@@ -1,0 +1,42 @@
+name: Hata bildirimi
+description: Beklenmeyen bir davranis veya cokme bildir
+title: "[hata] "
+labels: ["hata"]
+body:
+  - type: textarea
+    id: ne-oldu
+    attributes:
+      label: Ne oldu?
+      description: Gordugun davranisi yaz. Hata mesaji varsa aynen yapistir.
+    validations:
+      required: true
+  - type: textarea
+    id: beklenen
+    attributes:
+      label: Ne olmasini bekliyordun?
+    validations:
+      required: true
+  - type: textarea
+    id: adimlar
+    attributes:
+      label: Tekrar uretme adimlari
+      placeholder: |
+        1. Su komutu calistir: ...
+        2. Su dosyayi ver: ...
+        3. Hata cikiyor
+    validations:
+      required: true
+  - type: input
+    id: surum
+    attributes:
+      label: Surum ve isletim sistemi
+      placeholder: "mcp-vet 0.x, Windows 11 / Python 3.12"
+    validations:
+      required: true
+  - type: checkboxes
+    id: kontrol
+    attributes:
+      label: Kontrol
+      options:
+        - label: Ayni hatayi bildiren acik bir issue olmadigini kontrol ettim
+          required: true
