@@ -133,3 +133,44 @@ jobs:
           assert d['findings'], 'self-audit found nothing, which would mean the rules stopped firing'
           print('self-audit produced', len(d['findings']), 'findings as expected')
           "
+
+  # 244 test yesilken paket derlenmiyordu.
+  #
+  # pyproject.toml'un 8. satiri `\r\r\n` ile bitiyordu - tek fazla bir satir
+  # basi karakteri. Python'un tomllib'i bunu yutuyor, uv'nin siki ayristiricisi
+  # yutmuyor: "carriage return must be followed by newline". Yani `pip install`
+  # calisiyordu, `uv build` calismiyordu, ve hicbir test paketlemeye
+  # dokunmadigi icin CI bunu hic gormedi.
+  #
+  # Bir araci kimse kuramiyorsa kac testi gectigi onemli degil. Bu is,
+  # yayinlanabilirligi testlerle ayni seviyeye cikariyor.
+  paket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Paket derleniyor mu
+        run: uv build
+
+      - name: Uretilen paket gecerli mi
+        run: |
+          set -e
+          uvx twine check dist/*
+          echo "--- uretilenler:"
+          ls -la dist/
+
+      # Derlenmis tekerlekten kurulup gercekten calismali. `uv build`in
+      # basarili olmasi, paketin icinde dogru dosyalarin oldugunu kanitlamaz:
+      # eksik bir paket verisi ya da yanlis bir giris noktasi ancak kurulunca
+      # ortaya cikar.
+      - name: Tekerlekten kurulunca komut calisiyor
+        run: |
+          set -e
+          uv venv /tmp/deneme
+          VIRTUAL_ENV=/tmp/deneme uv pip install dist/*.whl
+          /tmp/deneme/bin/mcp-vet --help > /dev/null
+          /tmp/deneme/bin/mcp-vet audit --offline --path tests/fixtures/clean_server > /dev/null
+          echo "kurulan paket calisiyor"
