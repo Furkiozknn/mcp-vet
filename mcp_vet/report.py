@@ -29,6 +29,7 @@ from .models import (
     Severity,
     Status,
 )
+from .risk import finding_is_shipped
 
 RULE = "─" * 62
 
@@ -166,8 +167,13 @@ def _findings_block(findings: Sequence[Finding], verbose: bool) -> List[str]:
 
     lines = ["Findings"]
     for finding in findings:
+        # Say where the finding lives when it is not the running server. The
+        # headline already ignores these (risk.finding_is_shipped), but a
+        # reader looking at the list still needs to know that a HIGH sitting in
+        # an issue template is not a HIGH in the code they are about to run.
+        scope = "" if finding_is_shipped(finding) else "  (outside the shipped server)"
         lines.append(
-            f"  [{finding.severity.value}/{finding.confidence.value} confidence] {finding.title}"
+            f"  [{finding.severity.value}/{finding.confidence.value} confidence] {finding.title}{scope}"
         )
         for line in _wrap(finding.explanation, width=72, indent=6):
             lines.append(line)
