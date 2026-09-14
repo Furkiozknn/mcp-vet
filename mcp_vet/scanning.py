@@ -275,3 +275,88 @@ def find_files(result: ScanResult, names: Sequence[str]) -> Dict[str, ScannedFil
         if base in wanted and base not in found:
             found[base] = scanned
     return found
+
+
+# --------------------------------------------------------------------------
+# What part of the repository does a file belong to?
+# --------------------------------------------------------------------------
+#
+# IGNORED_DIRS already encodes the idea that "a finding inside node_modules is
+# not a finding about this server". This extends the same idea one step: a
+# finding inside a test fixture, a release script or an issue template is also
+# not a finding about what the server does when it runs.
+#
+# It is not hypothetical. Auditing three widely-installed servers produced a
+# HIGH on each, and all three were outside the shipped code:
+#
+#   github/github-mcp-server    pkg/utils/api_test.go
+#   GLips/Figma-Context-MCP     .github/ISSUE_TEMPLATE/bug_report.md
+#   microsoft/playwright-mcp    roll.js   (a release script)
+#
+# A reader told "HIGH: contacts a webhook-capture destination" about a bug
+# report template learns nothing and stops trusting the next finding. That is
+# exactly the noise this tool exists to be an alternative to.
+#
+# Crucially this does NOT suppress anything - risk.py's rule is that a finding
+# is always reported at its true severity. It only decides what the HEADLINE
+# verdict is allowed to rest on.
+
+_TEST_DIR_PARTS = frozenset({
+    "test", "tests", "testing", "__tests__", "spec", "specs",
+    "fixture", "fixtures", "testdata", "test_data", "e2e", "conftest",
+})
+
+_DEV_DIR_PARTS = frozenset({
+    ".github", ".gitlab", ".circleci", "scripts", "script", "tools",
+    "hack", "ci", "build-tools", "devtools", "examples", "example",
+    "samples", "sample", "demo", "demos", "benchmarks", "benchmark",
+})
+
+_DOC_EXTENSIONS = frozenset({".md", ".mdx", ".rst", ".txt", ".adoc"})
+
+_TEST_NAME = re.compile(
+    r"(^|[._-])(test|tests|spec|conftest|fixtures?)([._-]|$)|(^|/)test_[^/]*$",
+    re.IGNORECASE,
+)
+
+SHIPPED, TEST, DEV, DOCS = "shipped", "test", "dev", "docs"
+
+
+def file_role(path: str) -> str:
+    """Which part of the repository this path belongs to.
+
+    Returns one of SHIPPED / TEST / DEV / DOCS. Order matters: a markdown file
+    under .github is documentation first, and a test helper under scripts/ is
+    still a test.
+
+    **Known limit, deliberately not fixed.** A dev script sitting at the
+    repository root with an ordinary name - `roll.js`, `release.js` - is
+    classified SHIPPED, because nothing in its path distinguishes it from a
+    server entry point. Guessing from the filename would risk the opposite
+    error: marking real server code as tooling and quietly dropping it out of
+    the verdict. In a security tool, over-reporting is the survivable mistake
+    and under-reporting is not, so the asymmetry is chosen on purpose.
+    """
+    p = path.replace("\\", "/").strip("/")
+    parts = [seg.lower() for seg in p.split("/")]
+    base = parts[-1] if parts else ""
+    ext = os.path.splitext(base)[1].lower()
+
+    if ext in _DOC_EXTENSIONS:
+        return DOCS
+    if any(seg in _TEST_DIR_PARTS for seg in parts[:-1]) or _TEST_NAME.search(base):
+        return TEST
+    if any(seg in _DEV_DIR_PARTS for seg in parts[:-1]):
+        return DEV
+    return SHIPPED
+
+
+def is_shipped(path: Optional[str]) -> bool:
+    """True when the path is code that runs as part of the server.
+
+    A finding with no path at all (a manifest-level observation, say) counts as
+    shipped: the alternative is silently dropping it from the verdict.
+    """
+    if not path:
+        return True
+    return file_role(path) == SHIPPED

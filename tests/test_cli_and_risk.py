@@ -14,6 +14,7 @@ from mcp_vet.http import RateLimited
 from mcp_vet.models import (
     Area,
     AuditReport,
+    Evidence,
     Confidence,
     Finding,
     SCHEMA_VERSION,
@@ -262,3 +263,95 @@ class TestNarrowCodePage:
         ham = stream.buffer.getvalue()
         for kotu in (b"\x1b", b"\x00", b"\x07"):
             assert kotu not in ham, f"escape sequence leaked: {kotu!r}"
+
+
+class TestFileRole:
+    """A finding outside the shipped server must not set the headline.
+
+    Auditing three widely-installed MCP servers produced a HIGH on each, and
+    every one of the three sat outside the code that runs:
+
+        github/github-mcp-server   pkg/utils/api_test.go
+        GLips/Figma-Context-MCP    .github/ISSUE_TEMPLATE/bug_report.md
+        microsoft/playwright-mcp   roll.js   (a release script)
+
+    Telling a reader "HIGH: contacts a webhook-capture destination" about a bug
+    report template is how a security tool trains people to ignore it.
+    """
+
+    @pytest.mark.parametrize(
+        "path,beklenen",
+        [
+            ("pkg/utils/api_test.go", "test"),
+            ("src/tests/server.test.ts", "test"),
+            ("tests/fixtures/evil/payload.py", "test"),
+            ("conftest.py", "test"),
+            (".github/ISSUE_TEMPLATE/bug_report.md", "docs"),
+            ("README.md", "docs"),
+            ("docs/install.mdx", "docs"),
+            ("scripts/scan-hidden-chars.mjs", "dev"),
+            (".github/workflows/ci.yml", "dev"),
+            ("examples/demo/app.py", "dev"),
+            ("src/server.ts", "shipped"),
+            ("mcp_vet/cli.py", "shipped"),
+            ("index.js", "shipped"),
+        ],
+    )
+    def test_paths_classify(self, path, beklenen):
+        from mcp_vet.scanning import file_role
+
+        assert file_role(path) == beklenen
+
+    def test_root_dev_script_stays_shipped(self):
+        """Deliberate: a root script with an ordinary name cannot be told apart
+        from an entry point by path, and guessing from the name risks marking
+        real server code as tooling. Over-reporting is the survivable error."""
+        from mcp_vet.scanning import file_role
+
+        assert file_role("roll.js") == "shipped"
+
+    @staticmethod
+    def _bulgu(path):
+        return Finding(
+            area=Area.SOURCE_CODE,
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            title="deneme",
+            explanation="deneme",
+            evidence=[Evidence(path=path, line=1)],
+        )
+
+    def test_headline_ignores_non_shipped_findings(self):
+        from mcp_vet.risk import overall_severity
+
+        assert overall_severity([self._bulgu("pkg/utils/api_test.go")]) == Severity.NOT_FLAGGED
+        assert overall_severity([self._bulgu(".github/ISSUE_TEMPLATE/bug.md")]) == Severity.NOT_FLAGGED
+
+    def test_headline_still_rises_for_shipped_findings(self):
+        from mcp_vet.risk import overall_severity
+
+        assert overall_severity([self._bulgu("src/server.ts")]) == Severity.HIGH
+
+    def test_non_shipped_finding_keeps_its_severity_everywhere_else(self):
+        """Scoping the headline is not suppression: the finding is still HIGH
+        in the list and in its area."""
+        from mcp_vet.risk import area_severities
+
+        f = self._bulgu("pkg/utils/api_test.go")
+        assert f.severity == Severity.HIGH
+        assert area_severities([f])[Area.SOURCE_CODE] == Severity.HIGH
+
+    def test_finding_without_a_path_counts_as_shipped(self):
+        """A manifest-level observation has no file. Dropping it from the
+        verdict would be a silent false negative."""
+        from mcp_vet.risk import overall_severity
+
+        f = Finding(
+            area=Area.INSTALLATION,
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            title="deneme",
+            explanation="deneme",
+            evidence=[],
+        )
+        assert overall_severity([f]) == Severity.HIGH

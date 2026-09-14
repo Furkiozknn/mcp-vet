@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Dict, List, Sequence
 
 from .models import Area, AreaAssessment, AuditReport, Confidence, Finding, Severity, Status
+from .scanning import is_shipped
 
 _ORDER = [
     Severity.NOT_FLAGGED,
@@ -87,8 +88,38 @@ def worst(severities: Sequence[Severity]) -> Severity:
     return max(severities, key=lambda s: _ORDER.index(s)) if severities else Severity.NOT_FLAGGED
 
 
+def finding_is_shipped(finding: Finding) -> bool:
+    """Does this finding touch code that runs when the server runs?
+
+    A finding whose every piece of evidence sits in tests, release scripts or
+    documentation describes the repository, not the running server. It is still
+    reported - suppression is not on the table, see the module docstring - but
+    it must not set the headline.
+
+    Auditing three widely-installed servers made the cost concrete: each
+    produced a HIGH, and all three were a test file, an issue template and a
+    release script. A verdict of "HIGH" on that basis teaches a reader to stop
+    reading verdicts.
+
+    Evidence with no path at all counts as shipped. Dropping a manifest-level
+    observation out of the verdict would be a silent false negative, which is
+    the error this tool cannot afford.
+    """
+    paths = [e.path for e in finding.evidence]
+    if not paths:
+        return True
+    return any(is_shipped(p) for p in paths)
+
+
 def overall_severity(findings: Sequence[Finding]) -> Severity:
-    return worst([_demoted(f.severity, f.confidence) for f in findings])
+    """The headline, decided by findings in shipped code only.
+
+    Findings outside it keep their full severity everywhere else - in the
+    findings list, in `area_severities`, in the JSON. Only this one number is
+    scoped, because it is the one a reader acts on without reading further.
+    """
+    shipped = [f for f in findings if finding_is_shipped(f)]
+    return worst([_demoted(f.severity, f.confidence) for f in shipped])
 
 
 def area_severities(findings: Sequence[Finding]) -> Dict[Area, Severity]:
