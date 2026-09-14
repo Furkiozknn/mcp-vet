@@ -31,6 +31,39 @@ _INSTALL_DOC_NAMES = {"readme.md", "install.md", "installation.md", "setup.md",
 _INSTALL_SCRIPT_NAMES = {"install.sh", "setup.sh", "bootstrap.sh", "get.sh"}
 
 
+# A shell line can *contain* `curl | sh` without ever running it. Two cases
+# came up on every real repository scanned and both were reported CRITICAL:
+#
+#   run-server.sh:342   echo "   curl https://pyenv.run | bash" >&2
+#   install.sh:7        #   curl -fsSL .../install.sh | bash
+#
+# The first prints advice to the user, the second is a usage comment. Neither
+# executes anything. Reporting them as CRITICAL is how a reader learns the
+# CRITICAL label means nothing.
+#
+# Markdown is deliberately NOT filtered: `curl | bash` inside a README is the
+# project telling you to run it, which is exactly the thing worth flagging.
+_SHELL_COMMENT = re.compile(r"^\s*#")
+_PRINTS_IT = re.compile(r"^\s*(?:echo|printf|print|cat\s*<<)\b")
+
+
+def _line_executes_pipe(path: str, line: str) -> bool:
+    """Is this line actually running the pipe, or just showing it?
+
+    Only applied to shell-like files. A comment or an echoed string is text,
+    not execution, and calling it CRITICAL devalues every real CRITICAL.
+    """
+    lowered = path.lower()
+    if lowered.endswith((".md", ".mdx", ".rst")):
+        return True  # install instructions: being told to run it is the point
+    stripped = line.strip()
+    if _SHELL_COMMENT.match(stripped):
+        return False
+    if _PRINTS_IT.match(stripped):
+        return False
+    return True
+
+
 def analyze(result: ScanResult) -> List[Finding]:
     findings: List[Finding] = []
     findings.extend(_remote_execution(result))
@@ -54,7 +87,7 @@ def _remote_execution(result: ScanResult) -> List[Finding]:
         for index, line in enumerate(scanned.lines, start=1):
             if len(line) > 2000:
                 continue
-            if _REMOTE_PIPE.search(line):
+            if _REMOTE_PIPE.search(line) and _line_executes_pipe(scanned.path, line):
                 hits.append(Evidence(path=scanned.path, line=index, snippet=snippet(line)))
 
     if not hits:

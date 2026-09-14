@@ -355,3 +355,47 @@ class TestFileRole:
             evidence=[],
         )
         assert overall_severity([f]) == Severity.HIGH
+
+
+class TestPipeToShellPrecision:
+    """A shell line can contain `curl | sh` without ever running it.
+
+    Both of these were reported CRITICAL on real repositories:
+
+        run-server.sh:342   echo "   curl https://pyenv.run | bash" >&2
+        install.sh:7        #   curl -fsSL .../install.sh | bash
+
+    The first prints advice, the second is a usage comment. Calling either
+    CRITICAL is how a reader learns that CRITICAL means nothing here.
+    """
+
+    @pytest.mark.parametrize(
+        "path,line,calisiyor",
+        [
+            ("install.sh", "#   curl -fsSL https://x/i.sh | bash", False),
+            ("run-server.sh", '  echo "curl https://pyenv.run | bash" >&2', False),
+            ("setup.sh", "   printf 'curl https://x | sh'", False),
+            ("Dockerfile", "RUN curl -o- https://x/i.sh | bash", True),
+            ("setup.sh", "curl -sSf https://astral.sh/uv/install.sh | sh", True),
+            # `echo` bir kelime olarak baslamali; `echoserver` bir komut adi.
+            ("x.sh", "echoserver --url https://x | bash", True),
+        ],
+    )
+    def test_only_executing_lines_count(self, path, line, calisiyor):
+        from mcp_vet.install import _line_executes_pipe
+
+        assert _line_executes_pipe(path, line) is calisiyor
+
+    def test_markdown_is_not_filtered(self):
+        """`curl | bash` in a README is the project telling you to run it,
+        which is precisely the thing worth flagging."""
+        from mcp_vet.install import _line_executes_pipe
+
+        assert _line_executes_pipe("README.md", "#  curl https://x | bash") is True
+
+    def test_pattern_has_no_stray_control_character(self):
+        """Regression: written through a heredoc once, `\b` became a literal
+        backspace (0x08) and the echo filter silently never matched."""
+        from mcp_vet.install import _PRINTS_IT
+
+        assert "\x08" not in _PRINTS_IT.pattern
