@@ -36,7 +36,7 @@
   <!-- LEFT panel: without mcp-vet -->
   <g transform="translate(60,80)">
     <rect width="500" height="380" rx="16" fill="#1a1210" stroke="#e08a6b" stroke-opacity="0.55" stroke-width="1.6"/>
-    <text x="30" y="46" font-family="'JetBrains Mono', Consolas, monospace" font-weight="700" font-size="19" fill="#e8a888">✕ Without mcp-vet</text>
+    <text x="30" y="46" font-family="'JetBrains Mono', Consolas, monospace" font-weight="700" font-size="19" fill="#e8a888">Without mcp-vet</text>
     <line x1="30" y1="60" x2="470" y2="60" stroke="#e08a6b" stroke-opacity="0.3"/>
 
     <g font-family="Segoe UI, sans-serif" font-size="14.5" fill="#e6cfc6">
@@ -58,7 +58,7 @@
   <!-- RIGHT panel: with mcp-vet -->
   <g transform="translate(640,80)">
     <rect width="500" height="380" rx="16" fill="#0f1c17" stroke="#8effc2" stroke-opacity="0.65" stroke-width="1.6"/>
-    <text x="30" y="46" font-family="'JetBrains Mono', Consolas, monospace" font-weight="700" font-size="19" fill="#8effc2">✓ With mcp-vet</text>
+    <text x="30" y="46" font-family="'JetBrains Mono', Consolas, monospace" font-weight="700" font-size="19" fill="#8effc2">With mcp-vet</text>
     <line x1="30" y1="60" x2="470" y2="60" stroke="#8effc2" stroke-opacity="0.3"/>
 
     <g font-family="Segoe UI, sans-serif" font-size="14.5" fill="#d6ecdf">

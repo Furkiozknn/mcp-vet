@@ -53,7 +53,7 @@
   <!-- triple-overlap badge -->
   <g transform="translate(520,420)" filter="url(#coreglow)">
     <circle cx="0" cy="0" r="46" fill="#161206" stroke="#ffd76d" stroke-width="2.4"/>
-    <text x="0" y="-4" text-anchor="middle" font-family="'JetBrains Mono', Consolas, monospace" font-weight="700" font-size="13" fill="#ffd76d">⚠ FLAG</text>
+    <text x="0" y="-4" text-anchor="middle" font-family="'JetBrains Mono', Consolas, monospace" font-weight="700" font-size="13" fill="#ffd76d">FLAG</text>
     <text x="0" y="14" text-anchor="middle" font-family="'JetBrains Mono', Consolas, monospace" font-size="10.5" fill="#f3e4c2">all 3 true</text>
   </g>
 

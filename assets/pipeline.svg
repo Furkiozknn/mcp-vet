@@ -158,5 +158,5 @@
     <text x="30" y="146" font-family="Segoe UI, sans-serif" font-size="13.5" fill="#f3e4c2" opacity="0.9">Scratch clone is deleted either way.</text>
   </g>
 
-  <text x="210" y="612" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#ffd76d" opacity="0.85" letter-spacing="0.5">🚦 human checkpoint — no silent auto-install, ever</text>
+  <text x="210" y="612" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#ffd76d" opacity="0.85" letter-spacing="0.5">human checkpoint — no silent auto-install, ever</text>
 </svg>

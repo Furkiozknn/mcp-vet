@@ -11,7 +11,13 @@
 
 </div>
 
-<p align="center"><i>Bir hobi projesi. Yıldız sayısına değil, koda bakıyoruz.</i></p>
+<p align="center">
+  <img src="assets/audit.svg" alt="mcp-vet auditing nvidia-nim-mcp: capabilities with file and line, network destinations classified, two findings, and a note on what it did not check" width="680">
+</p>
+
+<p align="center"><sub><i>A real run: <code>mcp-vet audit --offline --path ./nvidia-nim-mcp</code>. Every line above carries a file and a line number — including the ones that turned out to be fine.</i></sub></p>
+
+<p align="center"><i>We read the code, not the star count.</i></p>
 
 ## What is this
 
