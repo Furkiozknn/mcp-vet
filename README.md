@@ -6,7 +6,7 @@
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-240%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-289%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
@@ -35,7 +35,7 @@ gets out of the way. It never decides that something is safe.
 | 🧬 **Checks provenance** | Cross-references the official MCP Registry and reports registry/source mismatches. |
 | 🎭 **Detects tool poisoning** | Finds tool descriptions written to steer the model rather than describe a contract. |
 | 📉 **Vets the popularity signal** | The original star/fork/age heuristic, kept — and demoted to what it actually is. |
-| 🚦 **Never installs blind** | Read-only by construction. Nothing is installed, cloned, or executed. |
+| 🚦 **Never installs blind** | The CLI is read-only by construction: it installs, clones and executes nothing. |
 | 🤖 **Safe for agent use** | Repository content is treated as data, never instructions — and sanitized before it reaches a terminal. |
 
 ---
@@ -313,8 +313,11 @@ python3 scripts/vet.py audit --offline --path ./checkout
 uv run python scripts/vet.py audit --offline --path ./checkout   # no python3 on PATH
 ```
 
-`--path` is what enables source analysis. **mcp-vet never clones anything** —
-that decision stays with you.
+`--path` is what enables source analysis. **The `mcp-vet` CLI never clones
+anything** — that decision stays with you. The one exception is the separate
+ecosystem-scan helper, `scripts/ekosistem-tara.py`, which does shallow-clone
+each repository it sweeps into a temporary directory; run it only if that is
+what you want.
 
 ### 🔩 Zero dependencies
 
@@ -477,7 +480,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**244 tests**, no network access in any of them. Beyond the analyzers, one
+**289 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:
