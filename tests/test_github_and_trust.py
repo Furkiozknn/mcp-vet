@@ -15,7 +15,7 @@ import pytest
 from mcp_vet import trust
 from mcp_vet.audit import audit_directory
 from mcp_vet.github import RepoMeta, fetch_extras, fetch_repo, search_repos
-from mcp_vet.http import FetchError, NotFound, RateLimited
+from mcp_vet.http import FetchError, NotFound, RateLimited, get_json
 from mcp_vet.models import Severity
 from mcp_vet.report import render_search_table, render_text
 from mcp_vet.popularity import assess as popularity_assess
@@ -113,6 +113,36 @@ class TestNetworkLayer:
         extras = fetch_extras("acme/widget")
         assert extras.contributors is None
         assert len(extras.errors) == 3   # contributors, releases, tags
+
+
+class TestOnlyTheTwoExpectedHostsAreCalled:
+    """Requests carry GITHUB_TOKEN, so the URL itself is checked before sending.
+
+    The host and scheme are verified in the one place every request passes
+    through, rather than trusted from whichever caller assembled the string.
+    """
+
+    @pytest.mark.parametrize("url", [
+        "http://api.github.com/repos/acme/widget",     # not https
+        "https://evil.example/repos/acme/widget",      # not ours
+        "https://api.github.com.evil.example/x",       # suffix trick
+        "file:///etc/passwd",
+        "ftp://api.github.com/x",
+    ])
+    @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_refused_without_a_request(self, urlopen, url):
+        with pytest.raises(FetchError):
+            get_json(url, cache=False)
+        assert urlopen.call_count == 0
+
+    @pytest.mark.parametrize("url", [
+        "https://api.github.com/repos/acme/widget",
+        "https://registry.modelcontextprotocol.io/v0/servers",
+    ])
+    @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_the_two_real_hosts_pass(self, urlopen, url):
+        urlopen.return_value = mock_response({"ok": True})
+        assert get_json(url, cache=False) == {"ok": True}
 
 
 class TestTrustSignals:

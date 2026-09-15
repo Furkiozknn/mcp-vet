@@ -51,6 +51,14 @@ DEFAULT_TIMEOUT = 15
 # broken endpoint should not be able to exhaust memory through us.
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
+# mcp-vet talks to exactly two services, and its GitHub requests carry
+# GITHUB_TOKEN. A URL assembled from untrusted input (a repository "name"
+# holding `..`, `?` or `#`) could otherwise address something else entirely
+# while still being sent that token, so scheme and host are checked here -
+# the single place every request passes through - rather than trusted from
+# whichever caller built the string.
+ALLOWED_HOSTS = frozenset({"api.github.com", "registry.modelcontextprotocol.io"})
+
 CACHE_ENV = "MCP_VET_CACHE"
 CACHE_DIR_ENV = "MCP_VET_CACHE_DIR"
 CACHE_TTL_ENV = "MCP_VET_CACHE_TTL"
@@ -283,8 +291,23 @@ def _header(resp: Any, name: str) -> Optional[str]:
     return value if isinstance(value, str) and value else None
 
 
+def check_url(url: str) -> None:
+    """Refuse anything that is not https to one of ALLOWED_HOSTS.
+
+    Raises FetchError, so a caller that already degrades gracefully on a
+    network failure degrades the same way here instead of crashing.
+    """
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https":
+        raise FetchError(f"refusing non-https URL: {url}", url=url)
+    host = (parsed.hostname or "").lower()
+    if host not in ALLOWED_HOSTS:
+        raise FetchError(f"refusing request to unexpected host: {host or url}", url=url)
+
+
 def _http_get(url: str, headers: Dict[str, str], timeout: int) -> Tuple[int, bytes, Optional[str]]:
     """One GET. Returns (status, body, etag); a 304 comes back as (304, b"", None)."""
+    check_url(url)
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

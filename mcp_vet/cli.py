@@ -24,6 +24,7 @@ passing one.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from typing import List, Optional
 
@@ -39,6 +40,20 @@ from .popularity import age_days, fork_ratio, is_suspicious
 from .models import Severity
 from .report import render_search_table, render_text
 from .scanning import sanitize_text
+
+
+# GitHub allows only these characters in an owner or a repository name. The
+# value is interpolated straight into API paths, so anything else - a second
+# slash, `..`, `?`, `#` - would not name a repository but would rewrite the
+# path or the query of a request that still carries GITHUB_TOKEN. It is
+# rejected once, here at the edge, before any command can use it.
+# `\A`/`\Z`, not `^`/`$`: in Python `$` also matches just before a trailing
+# newline, so `^...$` would accept "acme/widget\n".
+OWNER_REPO_RE = re.compile(r"\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+
+
+def valid_owner_repo(value: str) -> bool:
+    return bool(OWNER_REPO_RE.match(value))
 
 
 def _evaluate_for_table(meta) -> dict:
@@ -309,6 +324,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     harden_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
+    repo = getattr(args, "repo", None)
+    if repo is not None and not valid_owner_repo(repo):
+        print(
+            f"error: invalid repository {sanitize_text(repo)!r} - expected "
+            "<owner>/<repo> using letters, digits, '.', '_' or '-' only",
+            file=sys.stderr,
+        )
+        return risk_mod.EXIT_ERROR
     if getattr(args, "no_cache", False):
         http_mod.set_cache_enabled(False)
     network_before = http_mod.cache_stats()

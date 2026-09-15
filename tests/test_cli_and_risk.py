@@ -207,6 +207,45 @@ class TestCliSurface:
         json.loads(capsys.readouterr().out)
 
 
+class TestRepositoryNameIsValidated:
+    """`<owner>/<repo>` reaches the GitHub API path raw, so it is checked first.
+
+    Anything but `owner/repo` is a path- or query-injection into a request
+    that still carries GITHUB_TOKEN: `a/b/../../users/x` addresses a different
+    endpoint, and `a/b?x=` or `a/b#f` rewrites the query or truncates the path.
+    The guard sits in `main()` so no command can skip it.
+    """
+
+    @pytest.mark.parametrize("repo", [
+        "a/b/../../users/x",
+        "acme/widget?per_page=1",
+        "acme/widget#frag",
+        "acme/widget/extra",
+        "acme",
+        "acme/",
+        "/widget",
+        "acme/wid get",
+        "acme/widget\n",
+        "https://evil.example/acme/widget",
+    ])
+    @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_bad_repo_is_refused_before_any_request(self, urlopen, repo, capsys):
+        assert main(["check", repo]) == risk.EXIT_ERROR
+        assert urlopen.call_count == 0
+        assert capsys.readouterr().err.startswith("error: invalid repository")
+
+    @patch("mcp_vet.http.urllib.request.urlopen")
+    def test_a_normal_name_still_goes_through(self, urlopen):
+        urlopen.return_value = mock_response(repo_json())
+        assert main(["check", "acme/widget-mcp"]) == 0
+        assert urlopen.call_args[0][0].full_url == (
+            "https://api.github.com/repos/acme/widget-mcp"
+        )
+
+    def test_offline_audit_without_a_repo_is_unaffected(self):
+        assert main(["audit", "--offline", "--path", fixture("clean_server")]) == 0
+
+
 class TestNarrowCodePage:
     """A console that cannot draw the report's glyphs must cost a glyph, not
     the report.
