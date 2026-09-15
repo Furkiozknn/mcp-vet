@@ -38,7 +38,13 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+# pytest 9 dropped Python 3.9. Without the markers below, a resolver that
+# must satisfy every interpreter this package claims (requires-python
+# >=3.9) finds no solution and Dependabot's update job fails outright.
+dev = [
+    "pytest>=7,<9; python_version < '3.10'",
+    "pytest>=7; python_version >= '3.10'",
+]
 
 [project.scripts]
 mcp-vet = "mcp_vet.cli:main"
