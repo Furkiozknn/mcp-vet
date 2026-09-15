@@ -17,7 +17,7 @@ git clone https://github.com/Furkiozknn/mcp-vet.git
 cd mcp-vet
 python -m venv .venv
 .venv\Scripts\activate      # Linux/macOS: source .venv/bin/activate
-pip install -e ".[dev]"   # yoksa: pip install -r requirements.txt
+pip install -e ".[dev]"   # CI de tam olarak bunu calistiriyor
 ```
 
 ## 2. Degisikligi yapmadan once
