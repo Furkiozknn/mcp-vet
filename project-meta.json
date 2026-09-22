@@ -64,6 +64,7 @@
   "docs": {
     "readme": "README.md",
     "changelog": "CHANGELOG.md",
+    "version_history": null,
     "roadmap": null,
     "security": "SECURITY.md",
     "contributing": "CONTRIBUTING.md",
