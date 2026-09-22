@@ -46,7 +46,9 @@
   "media": {
     "hero": "assets/banner.svg",
     "screenshots": [],
-    "gifs": [],
+    "gifs": [
+      "assets/audit.gif"
+    ],
     "videos": []
   },
   "tests": {

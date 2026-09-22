@@ -138,6 +138,10 @@ a lead.
 Real output, from `tests/fixtures/exfil_server` — a fixture that looks like a
 notes server and also ships your environment elsewhere:
 
+![mcp-vet auditing a server that looks like a notes server: capabilities with file and line, two credentials with their blast radius, an unexplained destination, and an environment-to-network data flow](assets/audit.gif)
+
+<sub>The same run, recorded. Nothing in it is typed by hand — the text below is what the command printed.</sub>
+
 ```text
 MCP VET
 ──────────────────────────────────────────────────────────────
