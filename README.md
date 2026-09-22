@@ -566,3 +566,14 @@ incele, sonra karar ver.*
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## More from this ecosystem
+
+- **[repo-vet](https://github.com/Furkiozknn/repo-vet)** — checks what a README promises against what is actually there
+- **[godot-refcheck](https://github.com/Furkiozknn/godot-refcheck)** — finds broken references and dead signals in Godot projects, and repairs them
+- **[mcp-census](https://github.com/Furkiozknn/mcp-census)** — a reproducible count of the official MCP Registry
+- **[mini-creative-toolkit](https://github.com/Furkiozknn/mini-creative-toolkit)** — 23 CPU-first media tools behind one MCP server
+
+<sub>All of them in one searchable page: **[furkiozknn.github.io](https://furkiozknn.github.io/)** — each card is generated from that repository's own <code>project-meta.json</code>.</sub>
