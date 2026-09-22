@@ -52,9 +52,10 @@
     "videos": []
   },
   "tests": {
-    "count": 289,
-    "source": "`289 passed`",
-    "measured": "2026-09-15"
+    "count": 319,
+    "framework": "pytest",
+    "command": "uv run pytest -q",
+    "evidence": "319 passed"
   },
   "ci": {
     "workflows": [

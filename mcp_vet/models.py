@@ -125,6 +125,10 @@ class Evidence:
     line: Optional[int] = None
     snippet: Optional[str] = None
     detail: Optional[str] = None
+    # Set to "exclusion" when this line is inside a denylist - a mention that
+    # exists so the thing will NOT be touched. Never suppresses the evidence;
+    # see risk.finding_is_defensive.
+    context: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
