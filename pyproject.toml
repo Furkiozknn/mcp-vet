@@ -41,7 +41,7 @@ dependencies = []
 # pytest 9 dropped Python 3.9. Without the markers below, a resolver that
 # must satisfy every interpreter this package claims (requires-python
 # >=3.9) finds no solution and Dependabot's update job fails outright.
-# The >=9.0.3 floor is GHSA-wjm7-fv2f-2xw3 (pytest tmpdir permissions);
+# The >=9.0.3 floor is GHSA-6w46-j5rx-g56g (pytest tmpdir handling);
 # Python 3.9 cannot take that release, so that leg stays on pytest 8 until
 # 3.9 is dropped from the CI matrix. Dev-only, never shipped to users.
 dev = [
