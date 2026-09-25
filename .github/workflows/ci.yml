@@ -84,6 +84,19 @@ jobs:
           set -e
           test "$code" -eq 4 || { echo "expected exit 4, got $code"; exit 1; }
 
+      # argparse exits 2 on a usage error, and 2 is HIGH. A path that does
+      # not exist used to audit as an empty tree and exit 0.
+      - name: Unknown flag and missing path must exit 4, not 2 or 0
+        run: |
+          set +e
+          mcp-vet audit --offline --path . --no-such-flag >/dev/null 2>&1
+          flag=$?
+          mcp-vet audit --offline --path ./does-not-exist >/dev/null 2>&1
+          missing=$?
+          set -e
+          test "$flag" -eq 4 || { echo "unknown flag: expected 4, got $flag"; exit 1; }
+          test "$missing" -eq 4 || { echo "missing path: expected 4, got $missing"; exit 1; }
+
       # `report` is `audit` with JSON output, so it carries the same
       # severity exit code - 2 here, because the fixture is a HIGH finding.
       # The JSON on stdout is still complete and must still parse.

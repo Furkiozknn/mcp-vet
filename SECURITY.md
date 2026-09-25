@@ -37,7 +37,8 @@ it is the part that tells you how much the rest is worth.
   nothing here helps.
 - **Runtime behaviour.** mcp-vet performs no dynamic analysis. It never
   executes what it examines — which is deliberate, and also a limit.
-- **Compiled artifacts.** Binaries and minified bundles are not analysed.
+- **Compiled artifacts.** Binaries are not analysed. Minified bundles are
+  pattern-matched like any other file, which obfuscation can defeat.
 
 ### Trust boundaries
 

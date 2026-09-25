@@ -44,6 +44,22 @@ gets out of the way. It never decides that something is safe.
 | 🚦 **Never installs blind** | The CLI is read-only by construction: it installs, clones and executes nothing. |
 | 🤖 **Safe for agent use** | Repository content is treated as data, never instructions — and sanitized before it reaches a terminal. |
 
+### Try it in 30 seconds
+
+Python 3.9+, nothing else. Clone the server you are thinking of installing,
+then point mcp-vet at the checkout — straight from this repository, no install
+step:
+
+```bash
+git clone --depth 1 https://github.com/<owner>/<server> ./checkout
+uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet audit --offline --path ./checkout
+```
+
+The exit code is the verdict a script can read: `0` nothing above INFO, `1`
+low/medium, `2` high, `3` critical, `4` mcp-vet could not look. Drop
+`--offline` and add the `owner/repo` to include GitHub metadata and registry
+provenance.
+
 ---
 
 ## 📚 Table of contents
@@ -446,7 +462,7 @@ mcp-vet audit owner/repo --path ./checkout --json | jq '.findings[] | select(.se
 | `1` | LOW or MEDIUM findings |
 | `2` | HIGH findings |
 | `3` | CRITICAL findings |
-| `4` | mcp-vet could not complete |
+| `4` | mcp-vet could not complete — a network error, a `--path` that is not a directory or holds nothing readable, or a usage error |
 
 `0` and `4` are deliberately distinct: *"found nothing"* and *"could not look"*
 must never share an exit code, or a broken gate reads as a passing one.
@@ -454,8 +470,13 @@ must never share an exit code, or a broken gate reads as a passing one.
 ```yaml
 - name: Audit MCP server
   run: |
+    # Actions runs `bash -e`: without `set +e` a non-zero exit would end the
+    # step before the code could be read.
+    set +e
     python3 scripts/vet.py audit --offline --path . --json > report.json
     code=$?
+    set -e
+    if [ $code -eq 4 ]; then echo "mcp-vet could not complete"; exit 1; fi
     if [ $code -ge 2 ]; then echo "High or critical findings"; exit 1; fi
 ```
 
@@ -466,12 +487,25 @@ Output is byte-stable across runs, so two reports can be diffed directly.
 
 ## 📥 Install
 
-As a CLI:
+As a CLI, from GitHub (mcp-vet is not on PyPI yet):
+
+```bash
+pipx install git+https://github.com/Furkiozknn/mcp-vet
+mcp-vet --version
+
+# or run it without installing anything
+uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet --help
+```
+
+From a clone, for development:
 
 ```bash
 pip install -e .
 mcp-vet --help
 ```
+
+> The npm package also called `mcp-vet` is a different project by a different
+> author. It is not this tool, and this tool is not published on npm.
 
 As a Claude Code skill — copy the skill file, the launcher **and** the package:
 
@@ -544,9 +578,11 @@ Stated on **every report**, not only here:
   endpoint actually serves can differ.
 - **Dependencies are enumerated, not audited.** No advisory database is
   consulted, so vulnerability status is *unavailable* — never guessed.
-- **Binaries and minified bundles are not analysed.**
+- **Binaries are not analysed**, and a minified bundle is pattern-matched like
+  any other file — which obfuscation can defeat.
 - **Skipped files are reported**, because an attacker who knows the limits would
-  otherwise hide past them.
+  otherwise hide past them. Inside a file there is no limit to hide past: every
+  line is read, however long, and a file is read to its last line.
 - **A cached answer is not a live one.** When metadata came from the local
   response cache, the report says so and how old it is; `--no-cache` asks the
   servers directly.

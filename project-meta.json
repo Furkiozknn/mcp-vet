@@ -52,10 +52,10 @@
     "videos": []
   },
   "tests": {
-    "count": 319,
+    "count": 350,
     "framework": "pytest",
     "command": "uv run pytest -q",
-    "evidence": "319 passed"
+    "evidence": "350 passed"
   },
   "ci": {
     "workflows": [
