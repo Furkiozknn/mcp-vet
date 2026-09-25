@@ -138,6 +138,10 @@ a lead.
 Real output, from `tests/fixtures/exfil_server` — a fixture that looks like a
 notes server and also ships your environment elsewhere:
 
+![mcp-vet auditing a server that looks like a notes server: capabilities with file and line, two credentials with their blast radius, an unexplained destination, and an environment-to-network data flow](assets/audit.gif)
+
+<sub>The same run, recorded. Nothing in it is typed by hand — the text below is what the command printed.</sub>
+
 ```text
 MCP VET
 ──────────────────────────────────────────────────────────────
@@ -282,6 +286,31 @@ as a clean result.
 **There is no `SAFE`.** The severity scale runs `NOT_FLAGGED`, `INFO`, `LOW`,
 `MEDIUM`, `HIGH`, `CRITICAL`. `NOT_FLAGGED` means these checks found nothing —
 a much weaker claim, and the tool says so every time.
+
+**A refusal is not a use.** A server that keeps
+
+```python
+SECRET_FILENAMES = {".env", ".netrc", "id_rsa", "credentials.json"}
+```
+
+so it will never index those files is doing the opposite of reading
+credentials — and a line-based scanner cannot tell the two apart. Until this
+was fixed, mcp-vet rated exactly that server `HIGH` for *"references SSH key
+material"* and told the reader **DO NOT INSTALL**. Rating the defensive
+pattern more harshly than its absence is an instruction to stop writing it.
+
+Two contexts are recognised, both deliberately narrow: a mention inside a
+collection literal whose name reads as an exclusion (`DENYLIST`, `SKIP_`,
+`SECRET_FILENAMES`, …), and a mention in a comment or docstring — for Python
+decided by Python's own tokenizer, so `open("~/.netrc")` is never mistaken for
+prose because it happens to contain a string.
+
+As everywhere else in this model, **nothing is suppressed**. The finding keeps
+its severity, its file and its line, and the report says which of the two it
+is: `(only in a denylist or a comment)`. The qualification is applied per piece
+of evidence, so a single real read keeps the whole finding in the verdict
+however many denylists surround it — and a server that has both a denylist and
+a real read is still `HIGH`.
 
 ---
 
@@ -562,3 +591,14 @@ incele, sonra karar ver.*
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## More from this ecosystem
+
+- **[repo-vet](https://github.com/Furkiozknn/repo-vet)** — checks what a README promises against what is actually there
+- **[godot-refcheck](https://github.com/Furkiozknn/godot-refcheck)** — finds broken references and dead signals in Godot projects, and repairs them
+- **[mcp-census](https://github.com/Furkiozknn/mcp-census)** — a reproducible count of the official MCP Registry
+- **[mini-creative-toolkit](https://github.com/Furkiozknn/mini-creative-toolkit)** — 23 CPU-first media tools behind one MCP server
+
+<sub>All of them in one searchable page: **[furkiozknn.github.io](https://furkiozknn.github.io/)** — each card is generated from that repository's own <code>project-meta.json</code>.</sub>

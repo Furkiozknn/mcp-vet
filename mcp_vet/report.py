@@ -29,7 +29,7 @@ from .models import (
     Severity,
     Status,
 )
-from .risk import finding_is_shipped
+from .risk import finding_is_defensive, finding_is_shipped
 
 RULE = "─" * 62
 
@@ -171,7 +171,14 @@ def _findings_block(findings: Sequence[Finding], verbose: bool) -> List[str]:
         # headline already ignores these (risk.finding_is_shipped), but a
         # reader looking at the list still needs to know that a HIGH sitting in
         # an issue template is not a HIGH in the code they are about to run.
-        scope = "" if finding_is_shipped(finding) else "  (outside the shipped server)"
+        if not finding_is_shipped(finding):
+            scope = "  (outside the shipped server)"
+        elif finding_is_defensive(finding):
+            # Reported in full, with its lines - it just does not set the
+            # verdict, and the reader is told which of the two it is.
+            scope = "  (only in a denylist or a comment)"
+        else:
+            scope = ""
         lines.append(
             f"  [{finding.severity.value}/{finding.confidence.value} confidence] {finding.title}{scope}"
         )

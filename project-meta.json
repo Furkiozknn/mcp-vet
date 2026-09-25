@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0.0",
+  "id": "mcp-vet",
+  "owner": "Furkiozknn",
+  "repository": "https://github.com/Furkiozknn/mcp-vet",
+  "homepage": "https://furkiozknn.github.io/#mcp-vet",
+  "releases": "https://github.com/Furkiozknn/mcp-vet/releases",
+  "status": "active",
+  "category": "security-tool",
+  "platform": [
+    "cli",
+    "claude-code-skill"
+  ],
+  "primary_language": "Python",
+  "technologies": [
+    "Python 3.9-3.13",
+    "zero dependencies",
+    "MCP"
+  ],
+  "version": "0.5.0",
+  "license": "MIT",
+  "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "mcp",
+    "mcp-security",
+    "mcp-server",
+    "model-context-protocol",
+    "prompt-injection",
+    "python",
+    "security",
+    "security-audit",
+    "skill",
+    "static-analysis",
+    "supply-chain-security",
+    "zero-dependency"
+  ],
+  "summary": "An MCP tool description is read by the model on every single call, and nobody scrolls past it. mcp-vet reads the source before you install: 31 rules covering tool poisoning, exfiltration paths, install hooks and registry provenance, every finding quoted with file:line. Never executes what it audits. Zero dependencies, 289 tests.",
+  "key_features": [
+    "Reads an MCP server's source before you install it - 31 rules across tool poisoning, exfiltration paths, install hooks and registry provenance",
+    "Every finding is quoted with file:line, so a claim can be checked rather than believed",
+    "Never executes what it audits",
+    "JSON output and a CI mode, plus a version diff between two releases of the same server"
+  ],
+  "media": {
+    "hero": "assets/banner.svg",
+    "screenshots": [],
+    "gifs": [
+      "assets/audit.gif"
+    ],
+    "videos": []
+  },
+  "tests": {
+    "count": 319,
+    "framework": "pytest",
+    "command": "uv run pytest -q",
+    "evidence": "319 passed"
+  },
+  "ci": {
+    "workflows": [
+      "ci.yml",
+      "yayinla.yml"
+    ],
+    "badge": "https://github.com/Furkiozknn/mcp-vet/actions/workflows/ci.yml/badge.svg"
+  },
+  "docs": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md",
+    "version_history": null,
+    "roadmap": null,
+    "security": "SECURITY.md",
+    "contributing": "CONTRIBUTING.md",
+    "license_file": "LICENSE"
+  },
+  "social": {
+    "headline": "An MCP tool description is read on every call. Nobody scrolls past it. mcp-vet does.",
+    "hashtags": [
+      "mcp",
+      "security",
+      "supplychain",
+      "aiagents"
+    ],
+    "primary_link": "https://github.com/Furkiozknn/mcp-vet"
+  },
+  "provenance": {
+    "generated_at": "2026-09-22",
+    "generator": "schema/uret.py",
+    "rule": "mechanical fields read from the repository and the GitHub API; editorial fields hand-written and reviewed; no field is generated from a guess"
+  }
+}

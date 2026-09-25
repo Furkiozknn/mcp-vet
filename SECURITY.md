@@ -162,6 +162,35 @@ seeing something real.** A quieter report is not a safer server.
 7. Credential *values* are never read. Only variable names appear in a report,
    and the data model has nowhere to put a value.
 
+## Open advisories on this repository
+
+One Dependabot alert is open and is expected to stay open. It is recorded
+here rather than left to be guessed at.
+
+**GHSA-6w46-j5rx-g56g — pytest tmpdir handling, medium, fixed in 9.0.3.**
+`uv.lock` pins pytest 8.4.2 for interpreters below 3.10 and 9.1.1 for 3.10
+and above. pytest 9 requires Python 3.10, and this package declares
+`requires-python = ">=3.9"`, so the 3.9 leg of the test matrix cannot take
+the patched release.
+
+What the alert does *not* mean: pytest is not a dependency of the published
+package. The wheel's metadata carries it only behind the `dev` extra —
+
+```
+Requires-Dist: pytest<9,>=7; python_version < "3.10" and extra == "dev"
+Requires-Dist: pytest>=9.0.3; python_version >= "3.10" and extra == "dev"
+```
+
+— so nothing a user installs pulls a vulnerable pytest in. Dependabot reads
+`uv.lock`, which has no place to record that distinction, and classifies the
+entry as runtime.
+
+The exposure is therefore limited to a contributor running the suite on
+Python 3.9 on their own machine, on temporary directories that pytest itself
+creates. The alert closes for real the day Python 3.9 leaves the CI matrix
+and `requires-python` moves to `>=3.10` — a compatibility decision, not a
+security one, which is why it has not been made silently.
+
 ## Reporting a vulnerability
 
 If you find a way to make mcp-vet execute analyzed code, emit unsanitized
