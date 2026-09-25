@@ -32,7 +32,7 @@ from .models import (
     Severity,
 )
 from .patterns import ROLE_EXEC, ROLE_SINK, ROLE_SOURCE, Rule, rules_for
-from .scanning import ScannedFile, snippet
+from .scanning import ScannedFile, line_is_exclusion, prose_lines, snippet
 
 # At most this many evidence lines per finding: enough to show the pattern is
 # not a one-off, few enough that a report stays readable.
@@ -51,6 +51,10 @@ class Match:
     file: ScannedFile
     line: int
     text: str
+    # "exclusion" when the line sits in a denylist, "prose" when it is a
+    # comment or a docstring. Neither suppresses anything; both stop the
+    # match from setting the headline verdict. See scanning.line_is_exclusion.
+    context: Optional[str] = None
 
 
 # --------------------------------------------------------------------------
@@ -65,14 +69,24 @@ def scan_matches(files: Sequence[ScannedFile]) -> List[Match]:
         applicable = rules_for(scanned.extension)
         if not applicable:
             continue
+        prose = prose_lines(scanned.path, "\n".join(scanned.lines), scanned.extension)
         for index, line in enumerate(scanned.lines, start=1):
             # Cheap guard: a single enormous line is minified or generated, and
             # matching 30 patterns against it repeatedly buys nothing.
             if len(line) > 2000:
                 continue
-            for rule in applicable:
-                if rule.regex.search(line):
-                    matches.append(Match(rule=rule, file=scanned, line=index, text=line))
+            hit = [r for r in applicable if r.regex.search(line)]
+            if not hit:
+                continue
+            # Worked out once per matching line, not once per rule.
+            context = None
+            if index in prose:
+                context = "prose"
+            elif line_is_exclusion(scanned.lines, index):
+                context = "exclusion"
+            for rule in hit:
+                matches.append(Match(rule=rule, file=scanned, line=index,
+                                     text=line, context=context))
     return matches
 
 
@@ -90,7 +104,8 @@ def matches_to_findings(matches: Sequence[Match]) -> List[Finding]:
             # the capability list and in combinations, not as standalone noise.
             continue
         evidence = [
-            Evidence(path=m.file.path, line=m.line, snippet=snippet(m.text))
+            Evidence(path=m.file.path, line=m.line, snippet=snippet(m.text),
+                     context=m.context)
             for m in group[:MAX_EVIDENCE_PER_FINDING]
         ]
         extra = len(group) - len(evidence)
@@ -126,7 +141,8 @@ def matches_to_capabilities(matches: Sequence[Match]) -> List[Capability]:
                 name=name,
                 description=group[0].rule.title,
                 evidence=[
-                    Evidence(path=m.file.path, line=m.line, snippet=snippet(m.text))
+                    Evidence(path=m.file.path, line=m.line, snippet=snippet(m.text),
+                     context=m.context)
                     for m in group[:3]
                 ],
             )
@@ -349,7 +365,8 @@ def combination_findings(matches: Sequence[Match]) -> List[Finding]:
 
     def evidence_for(capability: str) -> List[Evidence]:
         return [
-            Evidence(path=m.file.path, line=m.line, snippet=snippet(m.text))
+            Evidence(path=m.file.path, line=m.line, snippet=snippet(m.text),
+                     context=m.context)
             for m in matches
             if m.rule.capability == capability
         ][:2]

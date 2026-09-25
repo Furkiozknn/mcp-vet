@@ -321,6 +321,157 @@ _TEST_NAME = re.compile(
 
 SHIPPED, TEST, DEV, DOCS = "shipped", "test", "dev", "docs"
 
+# --------------------------------------------------------------------------
+# Is this mention a use, or a refusal to use?
+# --------------------------------------------------------------------------
+#
+# The same idea as file_role, one level finer. A server that writes
+#
+#     SECRET_FILENAMES = {".env", ".netrc", "id_rsa", "credentials.json"}
+#
+# so that it will never index those files is doing the opposite of reading
+# credentials - and until this existed, mcp-vet rated it HIGH for "references
+# .netrc credentials" and told the reader DO NOT INSTALL. A tool that punishes
+# the defensive pattern harder than its absence teaches people to write the
+# unsafe version, which is a worse outcome than saying nothing.
+#
+# The test is deliberately narrow: the mention must be inside a collection
+# literal whose assignment target is named like an exclusion. Anything else -
+# a function call, a comparison, an f-string, a variable with an ordinary name -
+# is still a plain match. Narrow is the point: a security tool's
+# false-negative is the expensive one, so this only fires on a shape that has
+# no other plausible reading.
+#
+# And, as everywhere else here, it SUPPRESSES NOTHING. The finding is still
+# reported at full severity, with its file and line. It only stops being
+# allowed to set the headline verdict, and the report says why.
+
+_EXCLUSION_NAME = re.compile(
+    r"\b[A-Za-z_]*("
+    r"deny|denied|denylist|blocklist|blacklist|exclude|excluded|exclusion"
+    r"|skip|skipped|ignore|ignored|forbid|forbidden|refuse|never"
+    r"|secret_file|sensitive_file|redact|sanitiz|scrub|filter_out"
+    r")[A-Za-z_]*\s*(?::[^=]*)?=",
+    re.IGNORECASE,
+)
+
+_OPENERS = "([{"
+_CLOSERS = ")]}"
+
+
+def _depth_before(lines, index: int, start: int) -> int:
+    """Bracket depth accumulated from ``start`` up to (not including) ``index``."""
+    depth = 0
+    for i in range(start, index):
+        line = lines[i]
+        # Strings can hold brackets; for this purpose the cheap count is
+        # enough, because a mismatch only costs us a missed qualification.
+        for ch in line:
+            if ch in _OPENERS:
+                depth += 1
+            elif ch in _CLOSERS:
+                depth = max(0, depth - 1)
+    return depth
+
+
+#: How far back to look for the assignment that opened the literal. A denylist
+#: longer than this is not one line of shape any more, it is a data file.
+EXCLUSION_LOOKBACK = 25
+
+
+def line_is_exclusion(lines, line_no: int) -> bool:
+    """Is line ``line_no`` (1-based) inside a collection literal of exclusions?
+
+    True when the line itself is such an assignment, or when an assignment
+    whose name reads as an exclusion opened a bracket that is still open at
+    this line.
+    """
+    if line_no < 1 or line_no > len(lines):
+        return False
+    here = lines[line_no - 1]
+    if _EXCLUSION_NAME.search(here):
+        return True
+    start = max(0, line_no - 1 - EXCLUSION_LOOKBACK)
+    for i in range(line_no - 2, start - 1, -1):
+        candidate = lines[i]
+        if not _EXCLUSION_NAME.search(candidate):
+            continue
+        # The assignment has to still be open at our line.
+        if _depth_before(lines, line_no - 1, i) > 0:
+            return True
+        return False
+    return False
+
+# --------------------------------------------------------------------------
+# Prose: a line that cannot do anything
+# --------------------------------------------------------------------------
+#
+# The other half of the same problem. `local_notes_search.py` explains its own
+# denylist in the docstring of the function that applies it:
+#
+#     Credential-shaped file names (.env, id_rsa, credentials.json, .netrc,
+#     *.pem, ...) are never indexed.
+#
+# A regex over lines cannot tell that apart from code that opens the file. But
+# Python can: `tokenize` says exactly which lines are comments or string
+# literals, with no heuristics and no guessing. A comment cannot read an SSH
+# key, and a docstring that describes a refusal is the strongest possible
+# evidence that the refusal exists.
+#
+# Only Python is done precisely. For other languages a whole-line `#` or `//`
+# comment is recognised and nothing else is, because a half-right string
+# tokenizer for five languages would introduce exactly the false negatives
+# this file is careful to avoid.
+
+_LINE_COMMENT = re.compile(r"^\s*(#|//|--\s|;)")
+
+_prose_cache: dict = {}
+
+
+def prose_lines(path: str, text: str, extension: str) -> frozenset:
+    """1-based line numbers that are comment or string-literal only.
+
+    For .py this is exact: Python's own tokenizer decides. A file that does not
+    parse returns an empty set rather than a guess - an unparseable file is
+    exactly where a scanner should stay literal.
+    """
+    key = (path, len(text))
+    hit = _prose_cache.get(key)
+    if hit is not None:
+        return hit
+
+    lines = text.splitlines()
+    result = set()
+    if extension == ".py":
+        import io as _io
+        import tokenize as _tok
+
+        try:
+            code_lines = set()
+            prose_candidates = set()
+            for tok in _tok.generate_tokens(_io.StringIO(text).readline):
+                if tok.type in (_tok.COMMENT, _tok.STRING):
+                    for n in range(tok.start[0], tok.end[0] + 1):
+                        prose_candidates.add(n)
+                elif tok.type not in (_tok.NL, _tok.NEWLINE, _tok.INDENT,
+                                      _tok.DEDENT, _tok.ENDMARKER):
+                    code_lines.add(tok.start[0])
+            # A line with real code on it is not prose, even if a string
+            # also starts there: `open(".netrc")` must never qualify.
+            result = prose_candidates - code_lines
+        except (SyntaxError, _tok.TokenError, IndentationError, ValueError):
+            result = set()
+    else:
+        for i, line in enumerate(lines, start=1):
+            if _LINE_COMMENT.match(line):
+                result.add(i)
+
+    frozen = frozenset(result)
+    _prose_cache[key] = frozen
+    return frozen
+
+
+
 
 def file_role(path: str) -> str:
     """Which part of the repository this path belongs to.

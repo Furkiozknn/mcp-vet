@@ -111,6 +111,65 @@ def finding_is_shipped(finding: Finding) -> bool:
     return any(is_shipped(p) for p in paths)
 
 
+def finding_is_defensive(finding: Finding) -> bool:
+    """Is every line behind this finding a refusal, or prose about one?
+
+    Two shapes qualify, both decided in `scanning`: a mention inside a
+    denylist literal, and a mention in a comment or docstring.
+
+    The case that forced this: a notes server keeps
+
+        SECRET_FILENAMES = {".env", ".netrc", "id_rsa", "credentials.json"}
+
+    so those files are never indexed, and documents the refusal in the
+    docstring of the function that enforces it. mcp-vet read both as
+    "references SSH key material", rated the server HIGH, and printed DO NOT
+    INSTALL. Rating the defensive pattern worse than its absence is an
+    instruction to stop writing it.
+
+    A finding with one piece of ordinary evidence is not defensive. One real
+    `open("~/.ssh/id_rsa")` anywhere keeps the whole finding in the headline,
+    however many denylists surround it - the asymmetry is the same one the
+    rest of this module keeps: over-reporting is survivable.
+
+    Evidence without a context - anything the scanner could not classify -
+    counts as ordinary.
+    """
+    if not finding.evidence:
+        return False
+    return all(e.context in ("exclusion", "prose") for e in finding.evidence)
+
+
+def finding_sets_headline(finding: Finding) -> bool:
+    """May this finding decide the one number a reader acts on?
+
+    The two qualifications compose, and they have to be applied per piece of
+    evidence rather than per finding. A single finding often carries evidence
+    from several places at once: the denylist in the server, the docstring
+    that explains it, and the test that checks it. Judged finding-wide, each
+    qualification sees at least one line it cannot vouch for and neither
+    fires - so a server whose only mention of `.netrc` is a refusal to touch
+    it still came out HIGH.
+
+    A piece of evidence counts toward the headline when it is in shipped code
+    **and** it is neither a denylist entry nor prose. One such line is enough:
+    one real `open("~/.ssh/id_rsa")` keeps the finding in the verdict however
+    many denylists surround it.
+
+    A finding with no evidence at all still counts, as everywhere else here:
+    dropping a manifest-level observation out of the verdict would be a silent
+    false negative, and that is the error this tool cannot afford.
+    """
+    if not finding.evidence:
+        return True
+    for e in finding.evidence:
+        if e.context in ("exclusion", "prose"):
+            continue
+        if e.path is None or is_shipped(e.path):
+            return True
+    return False
+
+
 def overall_severity(findings: Sequence[Finding]) -> Severity:
     """The headline, decided by findings in shipped code only.
 
@@ -118,8 +177,8 @@ def overall_severity(findings: Sequence[Finding]) -> Severity:
     findings list, in `area_severities`, in the JSON. Only this one number is
     scoped, because it is the one a reader acts on without reading further.
     """
-    shipped = [f for f in findings if finding_is_shipped(f)]
-    return worst([_demoted(f.severity, f.confidence) for f in shipped])
+    counts = [f for f in findings if finding_sets_headline(f)]
+    return worst([_demoted(f.severity, f.confidence) for f in counts])
 
 
 def area_severities(findings: Sequence[Finding]) -> Dict[Area, Severity]:
