@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A server that refuses to touch credentials was rated as one that reads
+  them.** `local-notes-search-mcp` keeps a denylist —
+  `SECRET_FILENAMES = {".env", ".netrc", "id_rsa", ...}` — so those files are
+  never indexed, and documents the refusal in the docstring of the function
+  that enforces it. mcp-vet read both as *"references SSH key material"*,
+  rated the server HIGH and printed **DO NOT INSTALL**. Rating the defensive
+  pattern more harshly than its absence is an instruction to stop writing it.
+
+  Two narrow contexts are now recognised per line of evidence: a mention
+  inside a collection literal whose name reads as an exclusion, and a mention
+  in a comment or docstring. Python's own tokenizer decides the second one, so
+  `open("~/.netrc")` is never mistaken for prose because it contains a string.
+
+  **Nothing is suppressed** — the module's existing rule stands. The finding is
+  still reported at full severity with its file and line, and the report now
+  says which of the two it is: `(only in a denylist or a comment)`. The
+  qualification applies per piece of evidence, so one real read anywhere keeps
+  the whole finding in the verdict however many denylists surround it.
+
+  30 new tests, half of them pointed the other way: a server that genuinely
+  reads `~/.ssh/id_rsa` and posts it outward is still HIGH, and a server that
+  has both a denylist and a real read is still HIGH.
+
 ## 0.5.0 — Faster, and honest about where the answers came from
 
 Measured before the change: an audit was 17–28 s of wall time, 99 % of it
