@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- **A regular expression was read as a shell.** `source.node_exec` matched
+  any `exec(`, so `/re/.exec(text)` - a RegExp method - was reported as
+  *"child_process.exec() runs a command through a shell"*. GLips/Figma-Context-MCP
+  has one line of that shape in its shipped code (`src/transformers/text.ts`),
+  and it was enough to rate the whole server HIGH and print **DO NOT INSTALL**.
+  The rule now counts a method call only on `child_process` itself, on its
+  `require()`, or on the names it is conventionally bound to (`cp`,
+  `childProcess`, `child`, `proc`); a bare `exec(` / `execSync(` is still the
+  destructured import. Re-run against Figma-Context-MCP @ c083d65: HIGH ->
+  LOW, and the one remaining `execSync` is in a developer script, where it
+  belongs. Two regression tests pin both directions.
+
 - **A server that refuses to touch credentials was rated as one that reads
   them.** `local-notes-search-mcp` keeps a denylist —
   `SECRET_FILENAMES = {".env", ".netrc", "id_rsa", ...}` — so those files are
