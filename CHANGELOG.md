@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — Blind spots closed, and five false positives found on its own siblings
 
 ### Fixed
 
