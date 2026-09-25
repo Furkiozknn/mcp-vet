@@ -14,6 +14,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # olculen en uzun kosu 21 sn
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +39,7 @@ jobs:
   # code silently drifts is a gate that silently stops gating.
   cli-contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # olculen en uzun kosu 13 sn
     steps:
       - uses: actions/checkout@v7
 
@@ -159,11 +161,12 @@ jobs:
   # yayinlanabilirligi testlerle ayni seviyeye cikariyor.
   paket:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # olculen en uzun kosu 14 sn
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
 
       - name: Paket derleniyor mu
         run: uv build
