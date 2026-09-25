@@ -140,6 +140,10 @@ code before this change, the rest pin the true positives that must not move.
   install from git, a note that the npm package named `mcp-vet` is an
   unrelated project, and a CI example that no longer aborts under `bash -e`
   before it reads the exit code.
+- **An area row says when none of it counts toward the verdict.** Areas keep
+  their full severity, so a `pip install` in a comment showed
+  `Installation HIGH` beside `OVERALL RISK MEDIUM` with no reason given. Such
+  rows now read `HIGH  (not in the verdict)`, and `--verbose` says why.
 
 31 new tests in `tests/test_blind_spots.py`.
 
