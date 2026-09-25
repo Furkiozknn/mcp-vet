@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional, Pattern, Sequence, Tuple
 
 # Files above this are not read. Real MCP server source is far smaller; what
@@ -71,6 +71,17 @@ NOTABLE_FILENAMES = frozenset({
     "Dockerfile", "Makefile", "makefile", "Procfile", ".npmrc", ".pypirc",
 })
 
+# Lockfiles are *noted* wherever the walk meets them, whatever their size or
+# extension, but never read for that reason: dependencies.py needs to know
+# one exists, and a 700 KB uv.lock - normal for anything that depends on
+# litellm - was both too large to read and of an extension nothing reads, so
+# the report said "No uv.lock" next to a committed uv.lock.
+LOCKFILE_NAMES = frozenset({
+    "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock",
+    "bun.lockb", "bun.lock", "uv.lock", "poetry.lock", "pdm.lock", "pipfile.lock",
+    "requirements.lock", "cargo.lock", "go.sum", "gemfile.lock", "composer.lock",
+})
+
 
 @dataclass
 class ScannedFile:
@@ -98,6 +109,8 @@ class ScanResult:
     skipped_too_large: List[Tuple[str, int]]
     skipped_binary: List[str]
     hit_file_limit: bool = False
+    # Repo-relative paths of every lockfile the walk passed, read or not.
+    lockfiles: List[str] = field(default_factory=list)
 
     @property
     def paths(self) -> List[str]:
@@ -212,12 +225,13 @@ def interesting(path: str) -> bool:
     return ext in SOURCE_EXTENSIONS or ext in CONFIG_EXTENSIONS
 
 
-def iter_files(root: str) -> Iterator[str]:
+def iter_files(root: str, lockfiles: Optional[List[str]] = None) -> Iterator[str]:
     """Yield repo-relative paths worth reading, skipping ignored subtrees.
 
     Symlinks are not followed. A symlink into /etc or a self-referential loop
     would otherwise let the repository being audited steer the scanner outside
-    its own tree.
+    its own tree. Lockfiles met on the way are appended to `lockfiles` when a
+    list is given; they are yielded only if they are worth reading anyway.
     """
     root = os.path.abspath(root)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
@@ -233,6 +247,8 @@ def iter_files(root: str) -> Iterator[str]:
             full = os.path.join(dirpath, name)
             if os.path.islink(full):
                 continue
+            if lockfiles is not None and name.lower() in LOCKFILE_NAMES:
+                lockfiles.append(rel)
             if interesting(rel):
                 yield rel
 
@@ -274,8 +290,9 @@ def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:
     too_large: List[Tuple[str, int]] = []
     binary: List[str] = []
     hit_limit = False
+    lockfiles: List[str] = []
 
-    for rel in iter_files(root):
+    for rel in iter_files(root, lockfiles):
         if len(files) >= max_files:
             hit_limit = True
             break
@@ -298,11 +315,20 @@ def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:
         skipped_too_large=too_large,
         skipped_binary=binary,
         hit_file_limit=hit_limit,
+        lockfiles=lockfiles,
     )
 
 
 def source_files(result: ScanResult) -> List[ScannedFile]:
     return [f for f in result.files if f.extension in SOURCE_EXTENSIONS]
+
+
+def find_lockfiles(result: ScanResult) -> Dict[str, str]:
+    """Lockfile basename (lower-case) -> shallowest repo-relative path."""
+    found: Dict[str, str] = {}
+    for rel in sorted(result.lockfiles, key=lambda p: (p.count("/"), p)):
+        found.setdefault(os.path.basename(rel).lower(), rel)
+    return found
 
 
 def find_files(result: ScanResult, names: Sequence[str]) -> Dict[str, ScannedFile]:
