@@ -134,7 +134,19 @@ EXECUTION_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.node_exec",
-        regex=_c(r"\b(?:child_process\s*\.\s*)?exec(?:Sync)?\s*\("),
+        # `/re/.exec(s)` and `pattern.exec(s)` are RegExp methods, not a
+        # shell: a JS server using a regex was rated HIGH and "DO NOT INSTALL"
+        # for it (GLips/Figma-Context-MCP, src/transformers/text.ts). A method
+        # call counts only on child_process itself, its require(), or the
+        # names it is conventionally bound to; a bare call is the
+        # destructured `const { exec } = require("child_process")`.
+        regex=_c(
+            r"(?:\bchild_process\s*\.\s*"
+            r"|\brequire\(\s*['\"](?:node:)?child_process['\"]\s*\)\s*\.\s*"
+            r"|\b(?:cp|childProcess|child|proc)\s*\.\s*"
+            r"|(?<![\w$.]))"
+            r"exec(?:Sync)?\s*\("
+        ),
         extensions=JS,
         title="child_process.exec() runs a command through a shell",
         explanation=(
