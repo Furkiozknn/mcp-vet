@@ -26,7 +26,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, Iterator, List, Optional, Pattern, Sequence, Tuple
 
 # Files above this are not read. Real MCP server source is far smaller; what
 # lives above the line is bundles, lockfiles and data blobs.
@@ -35,9 +35,14 @@ MAX_FILE_BYTES = 512 * 1024
 # Stop before walking a whole vendored dependency tree.
 MAX_FILES_SCANNED = 3000
 
-# Only the first chunk of a file is pattern-matched. Long files are usually
-# long because they are generated.
-MAX_LINES_PER_FILE = 6000
+# A regular expression is never run over more than this many characters of
+# one line at a time. Long lines are still read in full - in overlapping
+# windows - because skipping them was an evasion: `os.system(...)` followed by
+# 2000 spaces used to pass every rule and exit 0. The window bounds the cost of
+# a pathological line; the overlap is longer than anything a rule matches, so
+# a match that straddles a window edge is still seen whole in the next window.
+MATCH_WINDOW = 2000
+MATCH_OVERLAP = 500
 
 # Directories that are somebody else's code, or build output. Skipping these is
 # both a performance decision and a correctness one: findings inside
@@ -75,7 +80,6 @@ class ScannedFile:
     text: str
     lines: List[str]
     size_bytes: int
-    truncated: bool = False
 
     @property
     def extension(self) -> str:
@@ -148,6 +152,48 @@ def looks_binary(chunk: bytes) -> bool:
     return b"\x00" in chunk[:8192]
 
 
+def _windows(line: str) -> Iterator[Tuple[int, int]]:
+    """(pos, endpos) spans covering `line`, each at most MATCH_WINDOW long."""
+    length = len(line)
+    if length <= MATCH_WINDOW:
+        yield 0, length
+        return
+    step = MATCH_WINDOW - MATCH_OVERLAP
+    start = 0
+    while True:
+        end = min(start + MATCH_WINDOW, length)
+        yield start, end
+        if end >= length:
+            return
+        start += step
+
+
+def line_search(regex: Pattern, line: str) -> bool:
+    """Whether `regex` matches anywhere in `line`, however long it is.
+
+    pos/endpos rather than slicing: a lookbehind such as `(?<![\\w.])eval`
+    still sees the characters before a window's start, so `model.eval()` cut
+    at a window edge does not turn into a bare `eval(`.
+    """
+    return any(regex.search(line, start, end) for start, end in _windows(line))
+
+
+def line_finditer(regex: Pattern, line: str) -> List["re.Match"]:
+    """Every match of `regex` in `line`, each once, in order of position.
+
+    Windows overlap, so the same match can be seen twice, and a match cut
+    short by one window's end is seen whole in the next. Per start position
+    the longest match wins.
+    """
+    best: Dict[int, "re.Match"] = {}
+    for start, end in _windows(line):
+        for match in regex.finditer(line, start, end):
+            kept = best.get(match.start())
+            if kept is None or match.end() > kept.end():
+                best[match.start()] = match
+    return [best[key] for key in sorted(best)]
+
+
 # --------------------------------------------------------------------------
 # Walking a tree
 # --------------------------------------------------------------------------
@@ -210,13 +256,11 @@ def read_file(root: str, rel_path: str) -> Optional[ScannedFile]:
 
     text = raw.decode("utf-8", errors="replace")
     text = sanitize_text(text)
+    # Every line is kept. The byte limit above already bounds the work, and it
+    # is reported when it bites; a line limit was not, so code placed after
+    # line 6000 of an ordinary-sized file used to go unread and unmentioned.
     lines = text.splitlines()
-    truncated = False
-    if len(lines) > MAX_LINES_PER_FILE:
-        lines = lines[:MAX_LINES_PER_FILE]
-        text = "\n".join(lines)
-        truncated = True
-    return ScannedFile(path=rel_path, text=text, lines=lines, size_bytes=size, truncated=truncated)
+    return ScannedFile(path=rel_path, text=text, lines=lines, size_bytes=size)
 
 
 def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:

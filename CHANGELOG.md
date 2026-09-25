@@ -27,6 +27,44 @@
   reads `~/.ssh/id_rsa` and posts it outward is still HIGH, and a server that
   has both a denylist and a real read is still HIGH.
 
+### Security
+
+- **Padding a line hid it from every rule.** Any line longer than 2000
+  characters was skipped by the source, install, injection, credential and
+  endpoint scanners, so `os.system("curl … | sh")` followed by 2000 spaces
+  audited `NOT FLAGGED`, exit 0, with nothing in "What this did not check".
+  Long lines are now matched in overlapping 2000-character windows (with
+  `pos`/`endpos`, so a lookbehind still sees across a window edge); a whole
+  512 KB file on one line still audits in well under a second.
+- **Line 6001 was never read.** Only the first 6000 lines of a file were
+  kept, silently. A payload after that point in an ordinary-sized file was
+  invisible. The 512 KB per-file limit - which *is* reported when it bites -
+  is now the only bound, and every line under it is read.
+- **A missing `--path` was a clean audit.** `audit`/`report --path` pointing at
+  nothing (a typo, a clone that failed one step earlier) walked an empty tree
+  and exited 0. A path that is not a directory, or a directory with nothing
+  mcp-vet can read, now exits 4 with a message; so does a missing side of
+  `diff --before-path/--after-path`.
+- **`from os import system` and `__import__("os").system(...)`** reached a
+  shell without ever spelling `os.system(`, and were not flagged. Both are now
+  caught by `source.os_system`, and the same forms by `source.os_popen`.
+
+### Changed
+
+- **Usage errors exit 4, not 2.** argparse's default of 2 is this tool's
+  HIGH, so a mistyped flag in a CI gate read as a finding. `--limit` now
+  rejects zero and negative values.
+- **`--version`** prints the installed version.
+- **`source.shell_true` needs a keyword argument.** `print("never use
+  shell=True")` was rated HIGH / DO NOT INSTALL; the rule now requires the
+  flag after `(`, `,` or at the start of a continuation line.
+- README: a 30-second start that runs from GitHub with `uvx`, `pipx`
+  install from git, a note that the npm package named `mcp-vet` is an
+  unrelated project, and a CI example that no longer aborts under `bash -e`
+  before it reads the exit code.
+
+31 new tests in `tests/test_blind_spots.py`.
+
 ## 0.5.0 — Faster, and honest about where the answers came from
 
 Measured before the change: an audit was 17–28 s of wall time, 99 % of it

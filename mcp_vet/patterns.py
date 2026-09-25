@@ -71,7 +71,10 @@ def _c(pattern: str) -> Pattern:
 EXECUTION_RULES: List[Rule] = [
     Rule(
         rule_id="source.shell_true",
-        regex=_c(r"shell\s*=\s*True"),
+        # A keyword argument: after `(` or `,`, or first on a continuation
+        # line. `print("never use shell=True")` is a sentence about the flag,
+        # and rating it HIGH / DO NOT INSTALL punishes the server that warns.
+        regex=_c(r"(?:[(,]|^)\s*shell\s*=\s*True\b"),
         extensions=PY,
         title="Subprocess invoked through a shell",
         explanation=(
@@ -91,7 +94,13 @@ EXECUTION_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.os_system",
-        regex=_c(r"\bos\.system\s*\("),
+        # `from os import system` and `__import__("os").system(` reach the
+        # same call without ever spelling `os.system(`.
+        regex=_c(
+            r"\bos\.system\s*\("
+            r"|^\s*from\s+os\s+import\b[^#\n]*\bsystem\b"
+            r"|__import__\(\s*['\"]os['\"]\s*\)\s*\.\s*system\b"
+        ),
         extensions=PY,
         title="os.system() executes a shell command string",
         explanation=(
@@ -106,7 +115,11 @@ EXECUTION_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.os_popen",
-        regex=_c(r"\bos\.popen\s*\("),
+        regex=_c(
+            r"\bos\.popen\s*\("
+            r"|^\s*from\s+os\s+import\b[^#\n]*\bpopen\b"
+            r"|__import__\(\s*['\"]os['\"]\s*\)\s*\.\s*popen\b"
+        ),
         extensions=PY,
         title="os.popen() executes a shell command string",
         explanation="Same shell-injection surface as os.system, with a pipe attached.",

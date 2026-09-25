@@ -32,7 +32,14 @@ from .models import (
     Severity,
 )
 from .patterns import ROLE_EXEC, ROLE_SINK, ROLE_SOURCE, Rule, rules_for
-from .scanning import ScannedFile, line_is_exclusion, prose_lines, snippet
+from .scanning import (
+    ScannedFile,
+    line_finditer,
+    line_is_exclusion,
+    line_search,
+    prose_lines,
+    snippet,
+)
 
 # At most this many evidence lines per finding: enough to show the pattern is
 # not a one-off, few enough that a report stays readable.
@@ -71,11 +78,9 @@ def scan_matches(files: Sequence[ScannedFile]) -> List[Match]:
             continue
         prose = prose_lines(scanned.path, "\n".join(scanned.lines), scanned.extension)
         for index, line in enumerate(scanned.lines, start=1):
-            # Cheap guard: a single enormous line is minified or generated, and
-            # matching 30 patterns against it repeatedly buys nothing.
-            if len(line) > 2000:
-                continue
-            hit = [r for r in applicable if r.regex.search(line)]
+            # A long line is matched in bounded windows, never skipped:
+            # padding a line past a length limit must not hide what is on it.
+            hit = [r for r in applicable if line_search(r.regex, line)]
             if not hit:
                 continue
             # Worked out once per matching line, not once per rule.
@@ -163,6 +168,11 @@ _ENV_NAME_PATTERNS = [
     re.compile(r"getenv\s*\(\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]"),
 ]
 
+def _names(pattern, line: str) -> List[str]:
+    """The captured variable name of every match of `pattern` in `line`."""
+    return [match.group(1) for match in line_finditer(pattern, line)]
+
+
 # Names that look like they hold a secret rather than a setting.
 _SECRETISH = re.compile(
     r"TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|PRIVATE|SESSION|COOKIE|DSN|WEBHOOK",
@@ -195,10 +205,8 @@ def extract_credentials(files: Sequence[ScannedFile]) -> List[CredentialRequirem
     seen: Dict[str, CredentialRequirement] = {}
     for scanned in files:
         for index, line in enumerate(scanned.lines, start=1):
-            if len(line) > 2000:
-                continue
             for pattern in _ENV_NAME_PATTERNS:
-                for name in pattern.findall(line):
+                for name in _names(pattern, line):
                     if not _SECRETISH.search(name):
                         continue
                     if name in seen:
