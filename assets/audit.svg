@@ -1,45 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 486" width="680" height="486" role="img" aria-label="mcp-vet — a real run against a real server">
-<defs><clipPath id="r"><rect width="680" height="486" rx="9"/></clipPath></defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 566" width="680" height="566" role="img" aria-label="mcp-vet — a real run against a real server">
+<defs><clipPath id="r"><rect width="680" height="566" rx="9"/></clipPath></defs>
 <g clip-path="url(#r)">
-<rect width="680" height="486" fill="#0e0d12"/>
+<rect width="680" height="566" fill="#0e0d12"/>
 <rect width="680" height="34" fill="#17161d"/>
 <line x1="0" y1="34" x2="680" y2="34" stroke="#26252f" stroke-width="1"/>
 <circle cx="20" cy="17.0" r="5" fill="#ff5f57"/>
 <circle cx="38" cy="17.0" r="5" fill="#febc2e"/>
 <circle cx="56" cy="17.0" r="5" fill="#28c840"/>
 <g font-family="'Cascadia Code','JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" xml:space="preserve"><text x="340.0" y="21.0" text-anchor="middle" fill="#6b6b77">mcp-vet — a real run against a real server</text></g>
-<g font-family="'Cascadia Code','JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" xml:space="preserve">
-<text x="22.0" y="61.0" fill="#c9a961" font-weight="600">$ </text>
+<g font-family="'Cascadia Code','JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" xml:space="preserve" style="white-space:pre">
+<text x="22.0" y="61.0" fill="#c9a961" font-weight="600">$</text>
 <text x="37.7" y="61.0" fill="#f2efe6">mcp-vet audit --offline --path ./nvidia-nim-mcp</text>
-<text x="22.0" y="101.0" fill="#9a9aa6">  OVERALL RISK   </text>
-<text x="155.1" y="101.0" fill="#d7d75f" font-weight="600">MEDIUM</text>
-<text x="202.1" y="101.0" fill="#6b6b77">        source </text>
-<text x="319.5" y="101.0" fill="#d7d75f">MEDIUM</text>
-<text x="366.5" y="101.0" fill="#6b6b77">  ·  deps </text>
-<text x="444.8" y="101.0" fill="#4ade9e">LOW</text>
-<text x="22.0" y="141.0" fill="#9a9aa6">  Capabilities detected</text>
-<text x="22.0" y="161.0" fill="#6cb6ff">    environment.read   </text>
+<text x="37.7" y="101.0" fill="#9a9aa6">OVERALL RISK</text>
+<text x="155.1" y="101.0" fill="#4ade9e" font-weight="600">LOW</text>
+<text x="225.6" y="101.0" fill="#6b6b77">source</text>
+<text x="280.4" y="101.0" fill="#d7d75f">MEDIUM</text>
+<text x="343.0" y="101.0" fill="#6b6b77">network</text>
+<text x="405.7" y="101.0" fill="#d7d75f">MEDIUM</text>
+<text x="37.7" y="141.0" fill="#9a9aa6">Capabilities detected</text>
+<text x="53.3" y="161.0" fill="#6cb6ff">environment.read</text>
 <text x="202.1" y="161.0" fill="#6b6b77">nvidia_image.py:31</text>
-<text x="22.0" y="181.0" fill="#6cb6ff">    filesystem.read    </text>
+<text x="53.3" y="181.0" fill="#6cb6ff">filesystem.read</text>
 <text x="202.1" y="181.0" fill="#6b6b77">nvidia_image.py:80</text>
-<text x="22.0" y="201.0" fill="#6cb6ff">    encoding.base64    </text>
-<text x="202.1" y="201.0" fill="#6b6b77">nvidia_image.py:537</text>
-<text x="22.0" y="221.0" fill="#6cb6ff">    package.install    </text>
-<text x="202.1" y="221.0" fill="#6b6b77">tests/test_output_dir.py:5</text>
-<text x="22.0" y="261.0" fill="#9a9aa6">  Network destinations</text>
-<text x="22.0" y="281.0" fill="#d7d75f">    UNEXPLAINED     </text>
-<text x="178.6" y="281.0" fill="#d8d3c6">integrate.api.nvidia.com   image.pollinations.ai</text>
-<text x="22.0" y="301.0" fill="#4ade9e">    INFRASTRUCTURE  </text>
-<text x="178.6" y="301.0" fill="#d8d3c6">pypi.org   github.com   modelcontextprotocol.io</text>
-<text x="22.0" y="341.0" fill="#9a9aa6">  Findings</text>
-<text x="22.0" y="361.0" fill="#d7d75f" font-weight="600">    MEDIUM  </text>
-<text x="116.0" y="361.0" fill="#d8d3c6">Invokes a package manager at runtime</text>
-<text x="22.0" y="381.0" fill="#d8d3c6">            </text>
-<text x="116.0" y="381.0" fill="#6b6b77">tests/test_output_dir.py:5</text>
-<text x="22.0" y="401.0" fill="#4ade9e" font-weight="600">    LOW     </text>
-<text x="116.0" y="401.0" fill="#d8d3c6">3 of 3 dependencies use floating version ranges</text>
-<text x="22.0" y="441.0" fill="#9a9aa6">  What this did not check</text>
-<text x="22.0" y="461.0" fill="#6b6b77">    No static analyzer can prove an MCP server is safe.</text>
+<text x="53.3" y="201.0" fill="#6cb6ff">network.external</text>
+<text x="202.1" y="201.0" fill="#6b6b77">nvidia_image.py:193</text>
+<text x="53.3" y="221.0" fill="#6cb6ff">encoding.base64</text>
+<text x="202.1" y="221.0" fill="#6b6b77">nvidia_image.py:537</text>
+<text x="53.3" y="241.0" fill="#6cb6ff">package.install</text>
+<text x="202.1" y="241.0" fill="#6b6b77">tests/test_output_dir.py:5</text>
+<text x="37.7" y="281.0" fill="#9a9aa6">Network destinations</text>
+<text x="53.3" y="301.0" fill="#d7d75f">UNEXPLAINED</text>
+<text x="178.6" y="301.0" fill="#d8d3c6">integrate.api.nvidia.com</text>
+<text x="382.2" y="301.0" fill="#d8d3c6">image.pollinations.ai</text>
+<text x="562.3" y="301.0" fill="#6b6b77">+8</text>
+<text x="53.3" y="321.0" fill="#4ade9e">INFRASTRUCTURE</text>
+<text x="178.6" y="321.0" fill="#d8d3c6">pypi.org</text>
+<text x="256.9" y="321.0" fill="#d8d3c6">github.com</text>
+<text x="350.9" y="321.0" fill="#d8d3c6">modelcontextprotocol.io</text>
+<text x="37.7" y="361.0" fill="#9a9aa6">Findings</text>
+<text x="53.3" y="381.0" fill="#d7d75f" font-weight="600">MEDIUM</text>
+<text x="116.0" y="381.0" fill="#d8d3c6">Invokes a package manager at runtime (outside the shipped server)</text>
+<text x="116.0" y="401.0" fill="#6b6b77">tests/test_output_dir.py:5</text>
+<text x="53.3" y="421.0" fill="#d7d75f" font-weight="600">MEDIUM</text>
+<text x="116.0" y="421.0" fill="#d8d3c6">Possible exfiltration path: local files read near an outbound request</text>
+<text x="116.0" y="441.0" fill="#6b6b77">nvidia_image.py:80  nvidia_image.py:193</text>
+<text x="53.3" y="461.0" fill="#4ade9e" font-weight="600">LOW</text>
+<text x="116.0" y="461.0" fill="#d8d3c6">Provider credential read near a call to that provider</text>
+<text x="116.0" y="481.0" fill="#6b6b77">nvidia_image.py:443  nvidia_image.py:447</text>
+<text x="37.7" y="521.0" fill="#9a9aa6">What this did not check</text>
+<text x="53.3" y="541.0" fill="#6b6b77">No static analyzer can prove an MCP server is safe.</text>
 </g>
-<rect x="0.5" y="0.5" width="679" height="485" rx="9" fill="none" stroke="#26252f"/>
+<rect x="0.5" y="0.5" width="679" height="565" rx="9" fill="none" stroke="#26252f"/>
 </g></svg>

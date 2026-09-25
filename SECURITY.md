@@ -133,7 +133,10 @@ Three separate causes, and they are worth telling apart:
 3. **A true positive.** `mcp_vet/http.py` reads `GITHUB_TOKEN` from the
    environment in `github_token()` and makes outbound requests in `get_json()`
    — the same file. mcp-vet reports that as a possible exfiltration path, at
-   HIGH severity and MEDIUM confidence. It is correct: mcp-vet really does read
+   HIGH severity and LOW confidence (the read and the request are more than a
+   function apart). It stays HIGH even though the token is named for the host
+   it goes to: the request URL is built at runtime, so `provider.py` cannot
+   read the destination off the source. It is correct: mcp-vet really does read
    your token and send it somewhere. The destination is `api.github.com`, which
    is the whole point, and confirming that took reading two functions.
 

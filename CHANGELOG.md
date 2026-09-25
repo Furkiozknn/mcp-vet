@@ -4,6 +4,72 @@
 
 ### Fixed
 
+Five errors, each found by running mcp-vet over the MCP servers next to it on
+this account (voice-io-mcp, nvidia-nim-mcp, local-notes-search-mcp,
+model-comparison-harness), and each pinned by tests in
+`tests/test_sibling_false_positives.py` that fail without the fix.
+
+- **A private directory was "a file made executable".** `source.chmod_exec`
+  matched any mode containing a 7, so `os.chmod(index_dir, 0o700)` - the idiom
+  for a directory only its owner can enter - was a MEDIUM finding (mcp-vet's
+  own cache directory in `http.py` was one). The rule now fires on what grants
+  execute to someone: `+x` in any form, a numeric mode that gives group or
+  others execute, `S_IEXEC`/`S_IX*`, and it now reads `Path.chmod` and
+  `fs.chmod(Sync)` too, which it did not before. An owner-only mode and a
+  `mode & 0o777` mask are not grants.
+- **A provider's own key sent to that provider was rated like exfiltration.**
+  An environment read next to an outbound call is HIGH, and voice-io-mcp
+  replaced a quota-free health check (`GROQ_API_KEY` -> `api.groq.com`) with one
+  that spends real quota just to get past that rating. The new `provider.py`
+  lowers the pairing to LOW - still reported, with both lines and the reason -
+  only when every secret the file reads is named for a provider it calls,
+  every call names its destination as a literal (or a constant, or a table of
+  literals), and the repository's docs name each provider. A bulk
+  `dict(os.environ)`, someone else's credential, a second unrelated key, a URL
+  that arrives as a parameter, a computed litellm `api_base`, an undocumented
+  provider or a capture host keeps it HIGH. The exfil fixture is unchanged.
+- **"No uv.lock" next to a committed uv.lock.** `.lock` was not an extension
+  the scanner reads, and a lockfile over 512 KB is not read at all, so
+  `uv.lock`, `poetry.lock`, `yarn.lock`, `Cargo.lock`, `go.sum` and any large
+  `package-lock.json` were reported missing. The walk now notes lockfiles
+  wherever it meets them, without reading them.
+- **`httpx>=0.27` was "a git or URL dependency"**, because the check was
+  `spec.startswith("http")`. Only a scheme (`git+`, `https://`, `file:`, ...)
+  makes a source remote now. In the same parser, `"mcp[cli]>=2.1"` ended the
+  dependency list at its `]`: voice-io-mcp counted 1 of 3 dependencies and
+  local-notes-search-mcp 0 of 4. The `dependencies = [...]` array is now read by
+  a small scanner that respects quotes and skips comments.
+- **litellm calls were invisible.** `litellm.acompletion(...)`,
+  `aspeech`, `atranscription`, `embedding` and the rest are outbound requests to
+  whichever provider the model name selects; the new `source.llm_api_call`
+  rule records them as `network.external`, and a data-flow row names the
+  provider host (`groq/...` -> `api.groq.com`). `httpx2` and `aiohttp` are now
+  HTTP clients too.
+
+Two more, found on the way:
+
+- **A full data-flow table hid a finding.** Findings were drawn from the flow
+  table after it was capped at 12 rows, so a LOW-confidence environment ->
+  network pair could fall off the end - with its HIGH finding. That is how
+  mcp-vet's own `GITHUB_TOKEN` flow in `http.py`, the one SECURITY.md walks
+  through, had stopped being reported. Findings now come from every flow; the
+  report says how many rows were not listed.
+- **A comment or a denylist entry is not half of a data flow.** Once litellm
+  calls were sinks, local-notes-search-mcp's own `SECRET_FILENAMES` denylist
+  paired with its LLM call as a CRITICAL "SSH key read near an outbound
+  request". Lines the scanner already marks as prose or exclusion no longer
+  enter data-flow pairing; their own findings are unchanged.
+
+Before -> after, `report --offline`: voice-io-mcp NOT_FLAGGED -> MEDIUM (its
+LLM calls are now seen, and uploading a caller-chosen audio file to Groq is a
+real file -> network flow), nvidia-nim-mcp LOW -> LOW, local-notes-search-mcp
+NOT_FLAGGED -> LOW, the reverted voice-io-mcp probe HIGH -> MEDIUM. All seven
+fixtures, GLips/Figma-Context-MCP and modelcontextprotocol/servers give the
+same verdict, rule ids and evidence counts as before.
+
+67 new tests in `tests/test_sibling_false_positives.py`; 39 of them fail on the
+code before this change, the rest pin the true positives that must not move.
+
 - **A regular expression was read as a shell.** `source.node_exec` matched
   any `exec(`, so `/re/.exec(text)` - a RegExp method - was reported as
   *"child_process.exec() runs a command through a shell"*. GLips/Figma-Context-MCP
