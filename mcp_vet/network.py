@@ -28,7 +28,7 @@ from .models import (
     NetworkEndpoint,
     Severity,
 )
-from .scanning import ScannedFile, snippet
+from .scanning import ScannedFile, line_finditer, snippet
 
 _URL_RE = re.compile(r"(https?)://([A-Za-z0-9._~-]+)(?::(\d+))?")
 
@@ -139,9 +139,7 @@ def extract_endpoints(
 
     for scanned in files:
         for index, line in enumerate(scanned.lines, start=1):
-            if len(line) > 4000:
-                continue
-            for match in _URL_RE.finditer(line):
+            for match in line_finditer(_URL_RE, line):
                 scheme, host = match.group(1), match.group(2).lower().rstrip(".")
                 if not host or "." not in host and host not in {"localhost"}:
                     continue

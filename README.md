@@ -6,16 +6,16 @@
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-289%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-420%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
 
 <p align="center">
-  <img src="assets/audit.svg" alt="mcp-vet auditing nvidia-nim-mcp: capabilities with file and line, network destinations classified, two findings, and a note on what it did not check" width="680">
+  <img src="assets/audit.svg" alt="mcp-vet auditing nvidia-nim-mcp: capabilities with file and line including its outbound calls, network destinations classified, three findings, and a note on what it did not check" width="680">
 </p>
 
-<p align="center"><sub><i>A real run: <code>mcp-vet audit --offline --path ./nvidia-nim-mcp</code>. Every line above carries a file and a line number — including the ones that turned out to be fine.</i></sub></p>
+<p align="center"><sub><i>A real run, abridged: <code>mcp-vet audit --offline --path ./nvidia-nim-mcp</code> (nvidia-nim-mcp @ <code>da9618a</code>). Every line above carries a file and a line number — including the ones that turned out to be fine.</i></sub></p>
 
 <p align="center"><i>We read the code, not the star count.</i></p>
 
@@ -43,6 +43,22 @@ gets out of the way. It never decides that something is safe.
 | 📉 **Vets the popularity signal** | The original star/fork/age heuristic, kept — and demoted to what it actually is. |
 | 🚦 **Never installs blind** | The CLI is read-only by construction: it installs, clones and executes nothing. |
 | 🤖 **Safe for agent use** | Repository content is treated as data, never instructions — and sanitized before it reaches a terminal. |
+
+### Try it in 30 seconds
+
+Python 3.9+, nothing else. Clone the server you are thinking of installing,
+then point mcp-vet at the checkout — straight from this repository, no install
+step:
+
+```bash
+git clone --depth 1 https://github.com/<owner>/<server> ./checkout
+uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet audit --offline --path ./checkout
+```
+
+The exit code is the verdict a script can read: `0` nothing above INFO, `1`
+low/medium, `2` high, `3` critical, `4` mcp-vet could not look. Drop
+`--offline` and add the `owner/repo` to include GitHub metadata and registry
+provenance.
 
 ---
 
@@ -113,14 +129,14 @@ AI agent, on hostile input*.
 | Category | Examples |
 |---|---|
 | **Execution** | `shell=True`, `os.system`, `child_process.exec`, `eval`/`exec`, `new Function`, pickle loads, `curl \| sh` |
-| **Filesystem** | read, write, recursive delete, `chmod +x` |
-| **Network** | HTTP clients, raw sockets, DNS; every destination extracted and classified |
+| **Filesystem** | read, write, recursive delete, a `chmod` that grants execute (`+x`, `0o755`, `S_IEXEC` — not an owner-only `0o700`) |
+| **Network** | HTTP clients (`requests`, `httpx`/`httpx2`, `aiohttp`, `urllib`, `fetch`, `axios`), litellm model calls, raw sockets, DNS; every destination extracted and classified |
 | **Credentials** | env vars, SSH keys, cloud credential files, browser stores, `.netrc`, OS keychains |
 | **Obfuscation** | base64/hex decoding, and the decode-then-execute combination |
 | **Persistence** | cron, systemd, shell startup files, LaunchAgents |
 | **Installation** | npm lifecycle hooks, `setup.py` execution, remote script piping, Dockerfile binary downloads |
-| **Dependencies** | counts, pinning, git/URL sources, missing lockfiles |
-| **Data flow** | a sensitive read sitting near an outbound call, in one file |
+| **Dependencies** | counts, pinning, git/URL sources, missing lockfiles (a lockfile is found at any size) |
+| **Data flow** | a sensitive read sitting near an outbound call, in one file; a provider's own key sent only to that documented provider is kept but rated LOW |
 | **Tool poisoning** | instruction override, role spoofing, concealment, secret solicitation, cross-tool redirection |
 | **Provenance** | registry/source mismatch, missing repository, remote-only servers |
 | **Repository trust** | archived, disabled, fork, licence, releases, staleness |
@@ -223,8 +239,9 @@ scripts/vet.py      the entry point SKILL.md names - a thin launcher
 mcp_vet/
   models.py         one report type every renderer reads
   scanning.py       bounded, sanitizing, never-executing file reader
-  patterns.py       all 31 detection rules, as data, in one auditable file
+  patterns.py       all 32 detection rules, as data, in one auditable file
   source.py         runs the rules; correlates capabilities and data flows
+  provider.py       is a credential going to the provider it is named for?
   injection.py      tool poisoning / prompt injection
   dependencies.py   manifests and lockfiles
   install.py        what runs during installation
@@ -311,6 +328,27 @@ is: `(only in a denylist or a comment)`. The qualification is applied per piece
 of evidence, so a single real read keeps the whole finding in the verdict
 however many denylists surround it — and a server that has both a denylist and
 a real read is still `HIGH`.
+
+**A provider's key sent to that provider is an API client.** A server that
+reads `GROQ_API_KEY` and calls Groq has the same shape — an environment read
+next to an outbound call — as one that reads `GITHUB_TOKEN` and posts it to a
+collector. Rated the same, the honest one gets reshaped to get past the
+auditor, which is what happened to voice-io-mcp's quota-free health check. So
+`provider.py` asks one narrow question per file, and lowers that pairing to
+`LOW` only when every part of the answer is written in the source:
+
+- every secret-looking variable the file reads is **named for a provider it
+  calls** (`GROQ_API_KEY` → `api.groq.com`, or a litellm `groq/…` model);
+  a bulk read such as `dict(os.environ)` never qualifies;
+- every outbound call **names its destination** as a literal, a constant bound
+  to one, or a table of literals — a URL that arrives as a parameter, or a
+  computed litellm `api_base`, ends the question;
+- the repository's **documentation names each provider**, and none of them is
+  a paste, tunnel or webhook-capture host or a raw IP.
+
+Anything else stays `HIGH`: someone else's credential, a second unrelated key
+in the file, a URL chosen at runtime, an undocumented provider. The pairing is
+reported either way, with both lines and the reason.
 
 ---
 
@@ -446,7 +484,7 @@ mcp-vet audit owner/repo --path ./checkout --json | jq '.findings[] | select(.se
 | `1` | LOW or MEDIUM findings |
 | `2` | HIGH findings |
 | `3` | CRITICAL findings |
-| `4` | mcp-vet could not complete |
+| `4` | mcp-vet could not complete — a network error, a `--path` that is not a directory or holds nothing readable, or a usage error |
 
 `0` and `4` are deliberately distinct: *"found nothing"* and *"could not look"*
 must never share an exit code, or a broken gate reads as a passing one.
@@ -454,8 +492,13 @@ must never share an exit code, or a broken gate reads as a passing one.
 ```yaml
 - name: Audit MCP server
   run: |
+    # Actions runs `bash -e`: without `set +e` a non-zero exit would end the
+    # step before the code could be read.
+    set +e
     python3 scripts/vet.py audit --offline --path . --json > report.json
     code=$?
+    set -e
+    if [ $code -eq 4 ]; then echo "mcp-vet could not complete"; exit 1; fi
     if [ $code -ge 2 ]; then echo "High or critical findings"; exit 1; fi
 ```
 
@@ -466,12 +509,25 @@ Output is byte-stable across runs, so two reports can be diffed directly.
 
 ## 📥 Install
 
-As a CLI:
+As a CLI, from GitHub (mcp-vet is not on PyPI yet):
+
+```bash
+pipx install git+https://github.com/Furkiozknn/mcp-vet
+mcp-vet --version
+
+# or run it without installing anything
+uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet --help
+```
+
+From a clone, for development:
 
 ```bash
 pip install -e .
 mcp-vet --help
 ```
+
+> The npm package also called `mcp-vet` is a different project by a different
+> author. It is not this tool, and this tool is not published on npm.
 
 As a Claude Code skill — copy the skill file, the launcher **and** the package:
 
@@ -515,7 +571,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**289 tests**, no network access in any of them. Beyond the analyzers, one
+**420 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:
@@ -544,9 +600,11 @@ Stated on **every report**, not only here:
   endpoint actually serves can differ.
 - **Dependencies are enumerated, not audited.** No advisory database is
   consulted, so vulnerability status is *unavailable* — never guessed.
-- **Binaries and minified bundles are not analysed.**
+- **Binaries are not analysed**, and a minified bundle is pattern-matched like
+  any other file — which obfuscation can defeat.
 - **Skipped files are reported**, because an attacker who knows the limits would
-  otherwise hide past them.
+  otherwise hide past them. Inside a file there is no limit to hide past: every
+  line is read, however long, and a file is read to its last line.
 - **A cached answer is not a live one.** When metadata came from the local
   response cache, the report says so and how old it is; `--no-cache` asks the
   servers directly.

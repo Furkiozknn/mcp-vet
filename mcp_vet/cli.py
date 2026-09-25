@@ -24,10 +24,12 @@ passing one.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from typing import List, Optional
 
+from . import __version__
 from . import diff as diff_mod
 from . import registry as registry_mod
 from . import risk as risk_mod
@@ -54,6 +56,52 @@ OWNER_REPO_RE = re.compile(r"\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 def valid_owner_repo(value: str) -> bool:
     return bool(OWNER_REPO_RE.match(value))
+
+
+def _path_problem(path: Optional[str], flag: str = "--path") -> Optional[str]:
+    """Why `path` cannot be audited, or None if it can.
+
+    A path that does not exist used to be walked as an empty tree and reported
+    NOT FLAGGED with exit 0 - a typo, or a clone that failed one step earlier
+    in a CI job, read as a clean audit. That is the one outcome the exit codes
+    exist to prevent.
+    """
+    if path is None or os.path.isdir(path):
+        return None
+    return f"{flag} {sanitize_text(path)!r} is not a directory"
+
+
+def _nothing_read(report) -> Optional[str]:
+    """An audit that read no file has not looked at anything."""
+    if report.notes.get("files_scanned", 1) != 0:
+        return None
+    return (
+        "no files mcp-vet can read were found under that path - nothing was "
+        "analysed, so there is nothing to report as clean"
+    )
+
+
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number")
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
+    return number
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse, except a usage error exits 4 instead of 2.
+
+    2 is this tool's HIGH. A gate that branches on the exit code would read
+    a mistyped flag as "high findings", and a gate written as `-lt 2` would
+    pass a run that never looked at anything.
+    """
+
+    def error(self, message: str):  # type: ignore[override]
+        self.print_usage(sys.stderr)
+        self.exit(risk_mod.EXIT_ERROR, f"{self.prog}: error: {message}\n")
 
 
 def _evaluate_for_table(meta) -> dict:
@@ -136,6 +184,10 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_audit(args: argparse.Namespace) -> int:
+    problem = _path_problem(args.path)
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return risk_mod.EXIT_ERROR
     if args.offline:
         if not args.path:
             print("error: --offline requires --path <directory>", file=sys.stderr)
@@ -151,6 +203,12 @@ def cmd_audit(args: argparse.Namespace) -> int:
             local_path=args.path,
             check_registry=not args.no_registry,
         )
+
+    if args.path:
+        problem = _nothing_read(report)
+        if problem:
+            print(f"error: {problem}", file=sys.stderr)
+            return risk_mod.EXIT_ERROR
 
     if args.json:
         print(report.to_json())
@@ -187,10 +245,14 @@ def cmd_diff(args: argparse.Namespace) -> int:
             print("error: --before-path and --after-path must be given together",
                   file=sys.stderr)
             return risk_mod.EXIT_ERROR
+        for flag, path in (("--before-path", args.before_path),
+                           ("--after-path", args.after_path)):
+            problem = _path_problem(path, flag)
+            if problem:
+                print(f"error: {problem}", file=sys.stderr)
+                return risk_mod.EXIT_ERROR
         # Label each side by its directory name, which is what a reader
         # recognises, rather than inventing "before"/"after".
-        import os
-
         result = diff_mod.diff_local(
             args.before_path, args.after_path,
             before_ref=args.before or os.path.basename(os.path.abspath(args.before_path)),
@@ -214,7 +276,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 def _network_flags() -> argparse.ArgumentParser:
     """Flags shared by every command that talks to GitHub or the registry."""
-    parent = argparse.ArgumentParser(add_help=False)
+    parent = _Parser(add_help=False)
     parent.add_argument(
         "--no-cache", action="store_true",
         help="ignore the local response cache and ask GitHub and the registry directly",
@@ -223,7 +285,7 @@ def _network_flags() -> argparse.ArgumentParser:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="mcp-vet",
         # Prefix matching is off deliberately: with it on, `--before` silently
         # resolves to `--before-path`, and a mistyped flag in a security tool
@@ -237,20 +299,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Exit codes: 0 nothing above INFO, 1 low/medium, 2 high, 3 critical, "
-            "4 mcp-vet could not complete."
+            "4 mcp-vet could not complete (including a usage error)."
         ),
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = _Subparsers(parser)
     net = _network_flags()
 
     p_search = sub.add_parser("search", parents=[net], help="Find candidate servers on GitHub")
     p_search.add_argument("query", help='e.g. "discord mcp"')
-    p_search.add_argument("--limit", type=int, default=10)
+    p_search.add_argument("--limit", type=_positive_int, default=10)
     p_search.set_defaults(func=cmd_search)
 
     p_registry = sub.add_parser("registry", parents=[net], help="Search the official MCP Registry")
     p_registry.add_argument("query", help='e.g. "discord"')
-    p_registry.add_argument("--limit", type=int, default=10)
+    p_registry.add_argument("--limit", type=_positive_int, default=10)
     p_registry.set_defaults(func=cmd_registry)
 
     p_check = sub.add_parser("check", parents=[net], help="Metadata-only look at one repository")

@@ -244,3 +244,23 @@ def test_ikisi_bir_arada_olan_sunucu_hala_yakalaniyor(tmp_path):
     """Denylist'i olan ama yine de okuyan bir sunucu muaf değildir."""
     _, _, manset = _denetle(tmp_path, IYI + "\n" + KOTU)
     assert manset in (Severity.HIGH, Severity.CRITICAL), manset
+
+
+def test_yalniz_duzyazidan_gelen_alan_mansete_girmedigini_soyluyor():
+    """voice-io-mcp: yorumdaki bir `pip install` Installation'i HIGH yapti,
+    genel sonuc MEDIUM kaldi ve alan satirinda ikisinin neden ayristigi yazmiyordu."""
+    from mcp_vet.models import AuditReport
+    from mcp_vet.risk import OUTSIDE_VERDICT_NOTE, finalize
+
+    duzyazi = _bulgu(Evidence(path="server.py", line=51, context="prose"))
+    gercek = _bulgu(Evidence(path="server.py", line=9))
+    gercek.area = Area.NETWORK
+    rapor = finalize(AuditReport(target="t", findings=[duzyazi, gercek]))
+    satir = {a.area: a for a in rapor.areas}
+    assert satir[Area.SOURCE_CODE].severity is Severity.HIGH  # siddet korunuyor
+    assert OUTSIDE_VERDICT_NOTE in satir[Area.SOURCE_CODE].summary
+    assert OUTSIDE_VERDICT_NOTE not in satir[Area.NETWORK].summary
+
+    from mcp_vet.report import render_text
+    metin = render_text(rapor)
+    assert "HIGH  (not in the verdict)" in metin

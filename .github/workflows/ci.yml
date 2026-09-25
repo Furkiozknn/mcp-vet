@@ -14,6 +14,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # olculen en uzun kosu 21 sn
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +39,7 @@ jobs:
   # code silently drifts is a gate that silently stops gating.
   cli-contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # olculen en uzun kosu 13 sn
     steps:
       - uses: actions/checkout@v7
 
@@ -83,6 +85,19 @@ jobs:
           code=$?
           set -e
           test "$code" -eq 4 || { echo "expected exit 4, got $code"; exit 1; }
+
+      # argparse exits 2 on a usage error, and 2 is HIGH. A path that does
+      # not exist used to audit as an empty tree and exit 0.
+      - name: Unknown flag and missing path must exit 4, not 2 or 0
+        run: |
+          set +e
+          mcp-vet audit --offline --path . --no-such-flag >/dev/null 2>&1
+          flag=$?
+          mcp-vet audit --offline --path ./does-not-exist >/dev/null 2>&1
+          missing=$?
+          set -e
+          test "$flag" -eq 4 || { echo "unknown flag: expected 4, got $flag"; exit 1; }
+          test "$missing" -eq 4 || { echo "missing path: expected 4, got $missing"; exit 1; }
 
       # `report` is `audit` with JSON output, so it carries the same
       # severity exit code - 2 here, because the fixture is a HIGH finding.
@@ -146,11 +161,12 @@ jobs:
   # yayinlanabilirligi testlerle ayni seviyeye cikariyor.
   paket:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # olculen en uzun kosu 14 sn
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
 
       - name: Paket derleniyor mu
         run: uv build
