@@ -53,9 +53,8 @@
   },
   "tests": {
     "count": 482,
-    "framework": "pytest",
-    "command": "uv run pytest -q",
-    "evidence": "482 passed"
+    "source": "CI log: `482 passed`",
+    "measured": "2026-09-28"
   },
   "ci": {
     "workflows": [
