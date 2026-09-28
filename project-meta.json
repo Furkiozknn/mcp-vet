@@ -36,7 +36,7 @@
     "supply-chain-security",
     "zero-dependency"
   ],
-  "summary": "An MCP tool description is read by the model on every single call, and nobody scrolls past it. mcp-vet reads the source before you install: 31 rules covering tool poisoning, exfiltration paths, install hooks and registry provenance, every finding quoted with file:line. Never executes what it audits. Zero dependencies, 289 tests.",
+  "summary": "An MCP tool description is read by the model on every single call, and nobody scrolls past it. mcp-vet reads the source before you install: 31 rules covering tool poisoning, exfiltration paths, install hooks and registry provenance, every finding quoted with file:line. Never executes what it audits. Zero dependencies, 380 tests.",
   "key_features": [
     "Reads an MCP server's source before you install it - 31 rules across tool poisoning, exfiltration paths, install hooks and registry provenance",
     "Every finding is quoted with file:line, so a claim can be checked rather than believed",
