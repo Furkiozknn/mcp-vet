@@ -29,7 +29,7 @@ from .models import (
     Severity,
     Status,
 )
-from .risk import finding_is_defensive, finding_is_shipped
+from .risk import OUTSIDE_VERDICT_NOTE, finding_is_defensive, finding_is_shipped
 
 RULE = "─" * 62
 
@@ -84,6 +84,7 @@ def render_text(report: AuditReport, verbose: bool = False, quiet: bool = False)
             label = _AREA_LABELS.get(assessment.area, assessment.area.value)
             lines.append(
                 f"  {label:<22}{assessment.severity.value}{_status_note(assessment.status)}"
+                + ("  (not in the verdict)" if OUTSIDE_VERDICT_NOTE in assessment.summary else "")
             )
             if verbose and assessment.summary:
                 lines.append(f"      {assessment.summary}")

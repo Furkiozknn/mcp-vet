@@ -39,9 +39,23 @@ from .models import (
     Severity,
     Status,
 )
-from .scanning import ScanResult, scan_tree, source_files
+from .scanning import DOCS, ScanResult, file_role, scan_tree, source_files
 
 DOC_EXTENSIONS = {".md", ".txt"}
+
+
+def _documentation_text(result: ScanResult) -> str:
+    """What the repository tells a reader about itself: its docs and server.json.
+
+    Used for one question only - whether a provider a server sends a credential
+    to is one it names (provider.py). Bounded so a huge docs tree cannot make
+    that question expensive.
+    """
+    parts = [
+        f.text for f in result.files
+        if file_role(f.path) == DOCS or os.path.basename(f.path).lower() == "server.json"
+    ]
+    return "\n".join(parts)[:2_000_000]
 
 
 def analyze_tree(result: ScanResult, purpose: str = "") -> dict:
@@ -54,11 +68,17 @@ def analyze_tree(result: ScanResult, purpose: str = "") -> dict:
     docs = [f for f in result.files if f.extension in DOC_EXTENSIONS]
 
     matches = source_mod.scan_matches(sources)
-    flows = source_mod.detect_dataflows(matches)
+    # Findings are drawn from every flow; only the table is capped. Capping
+    # first let a dozen unrelated pairs push a LOW-confidence
+    # environment -> network pair out of the list and, with it, its HIGH
+    # finding - which is how mcp-vet stopped reporting its own GITHUB_TOKEN
+    # flow in http.py, the one SECURITY.md walks through.
+    all_flows = source_mod.detect_dataflows(matches, _documentation_text(result), limit=None)
+    flows = all_flows[:source_mod.MAX_FLOWS_REPORTED]
 
     findings: List[Finding] = []
     findings.extend(source_mod.matches_to_findings(matches))
-    findings.extend(source_mod.dataflow_findings(flows))
+    findings.extend(source_mod.dataflow_findings(all_flows))
     findings.extend(source_mod.combination_findings(matches))
     findings.extend(injection_mod.analyze(sources, docs))
     findings.extend(install_mod.analyze(result))
@@ -75,9 +95,20 @@ def analyze_tree(result: ScanResult, purpose: str = "") -> dict:
         "credentials": source_mod.extract_credentials(sources),
         "endpoints": endpoints,
         "dataflows": flows,
+        "dataflows_total": len(all_flows),
         "dependencies": dependency_report,
         "scan": result,
     }
+
+
+def _flow_note(report: AuditReport, analysis: dict) -> None:
+    """Say so when the data-flow table was cut short."""
+    hidden = analysis["dataflows_total"] - len(analysis["dataflows"])
+    if hidden > 0:
+        report.limitations.append(
+            f"{hidden} further data flow(s) were not listed; every one of them was "
+            "still considered for the findings above."
+        )
 
 
 def _scan_notes(report: AuditReport, result: ScanResult, dependency_report) -> None:
@@ -146,6 +177,7 @@ def audit_directory(path: str, purpose: str = "", target: Optional[str] = None) 
         )
 
     _scan_notes(report, result, analysis["dependencies"])
+    _flow_note(report, analysis)
     return risk_mod.finalize(report)
 
 
@@ -234,6 +266,7 @@ def audit_repository(
         report.endpoints = analysis["endpoints"]
         report.dataflows = analysis["dataflows"]
         _scan_notes(report, result, analysis["dependencies"])
+        _flow_note(report, analysis)
     else:
         for area in (Area.SOURCE_CODE, Area.CAPABILITIES, Area.NETWORK,
                      Area.PROMPT_INJECTION, Area.DEPENDENCIES, Area.INSTALLATION):

@@ -227,6 +227,11 @@ def finalize(report: AuditReport) -> AuditReport:
                 summary=_default_summary(area, severity, report.findings),
             )
 
+    for area, assessment in existing.items():
+        note = _outside_verdict_note(area, report.findings)
+        if note and note not in assessment.summary:
+            assessment.summary = f"{assessment.summary} {note}".strip()
+
     report.areas = [existing[a] for a in Area if a in existing]
     report.overall = overall_severity(report.findings)
     report.recommendation = recommendation_for(report.overall)
@@ -251,6 +256,26 @@ def _dedupe_preserving_order(items: Sequence[str]) -> List[str]:
         seen.add(key)
         out.append(item)
     return out
+
+
+OUTSIDE_VERDICT_NOTE = (
+    "None of it sets the overall verdict: every line is in a comment, a "
+    "denylist, or code outside the shipped server."
+)
+
+
+def _outside_verdict_note(area: Area, findings: Sequence[Finding]) -> str:
+    """Say so when an area's rating comes only from lines the headline ignores.
+
+    Areas keep full severity on purpose (see `area_severities`). Without this
+    note a reader saw "Installation HIGH" next to "OVERALL RISK MEDIUM" and had
+    to open the finding to learn that the HIGH was a `pip install` in a
+    comment.
+    """
+    in_area = [f for f in findings if f.area is area]
+    if in_area and not any(finding_sets_headline(f) for f in in_area):
+        return OUTSIDE_VERDICT_NOTE
+    return ""
 
 
 def _default_summary(area: Area, severity: Severity, findings: Sequence[Finding]) -> str:

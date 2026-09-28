@@ -31,8 +31,16 @@ from .models import (
     Finding,
     Severity,
 )
+from . import provider as provider_mod
 from .patterns import ROLE_EXEC, ROLE_SINK, ROLE_SOURCE, Rule, rules_for
-from .scanning import ScannedFile, line_is_exclusion, prose_lines, snippet
+from .scanning import (
+    ScannedFile,
+    line_finditer,
+    line_is_exclusion,
+    line_search,
+    prose_lines,
+    snippet,
+)
 
 # At most this many evidence lines per finding: enough to show the pattern is
 # not a one-off, few enough that a report stays readable.
@@ -71,11 +79,9 @@ def scan_matches(files: Sequence[ScannedFile]) -> List[Match]:
             continue
         prose = prose_lines(scanned.path, "\n".join(scanned.lines), scanned.extension)
         for index, line in enumerate(scanned.lines, start=1):
-            # Cheap guard: a single enormous line is minified or generated, and
-            # matching 30 patterns against it repeatedly buys nothing.
-            if len(line) > 2000:
-                continue
-            hit = [r for r in applicable if r.regex.search(line)]
+            # A long line is matched in bounded windows, never skipped:
+            # padding a line past a length limit must not hide what is on it.
+            hit = [r for r in applicable if line_search(r.regex, line)]
             if not hit:
                 continue
             # Worked out once per matching line, not once per rule.
@@ -163,6 +169,11 @@ _ENV_NAME_PATTERNS = [
     re.compile(r"getenv\s*\(\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]"),
 ]
 
+def _names(pattern, line: str) -> List[str]:
+    """The captured variable name of every match of `pattern` in `line`."""
+    return [match.group(1) for match in line_finditer(pattern, line)]
+
+
 # Names that look like they hold a secret rather than a setting.
 _SECRETISH = re.compile(
     r"TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|PRIVATE|SESSION|COOKIE|DSN|WEBHOOK",
@@ -195,10 +206,8 @@ def extract_credentials(files: Sequence[ScannedFile]) -> List[CredentialRequirem
     seen: Dict[str, CredentialRequirement] = {}
     for scanned in files:
         for index, line in enumerate(scanned.lines, start=1):
-            if len(line) > 2000:
-                continue
             for pattern in _ENV_NAME_PATTERNS:
-                for name in pattern.findall(line):
+                for name in _names(pattern, line):
                     if not _SECRETISH.search(name):
                         continue
                     if name in seen:
@@ -242,7 +251,8 @@ def _nearest_url(scanned: ScannedFile, line: int, window: int = FLOW_PROXIMITY_L
     return best[1] if best else None
 
 
-def detect_dataflows(matches: Sequence[Match]) -> List[DataFlow]:
+def detect_dataflows(matches: Sequence[Match], docs_text: str = "",
+                     limit: Optional[int] = MAX_FLOWS_REPORTED) -> List[DataFlow]:
     """Pair sensitive reads with outbound sends that sit near them.
 
     This reports *proximity*, which is the honest limit of line-based analysis.
@@ -250,9 +260,19 @@ def detect_dataflows(matches: Sequence[Match]) -> List[DataFlow]:
     look" - not "this value provably reaches that call". Confidence carries
     that: MEDIUM when they sit within a function's worth of lines, LOW when
     they merely share a file.
+
+    `docs_text` is the repository's documentation. It is only used to ask
+    whether an environment read is a provider credential sent to that
+    provider (provider.py); without it, nothing is ever scoped.
     """
     by_file: Dict[str, List[Match]] = defaultdict(list)
     for match in matches:
+        # A comment cannot read a key and a denylist entry is a refusal to:
+        # neither is half of a data flow. Before litellm calls were sinks
+        # this never mattered; after, local-notes-search-mcp's own
+        # SECRET_FILENAMES denylist paired with its LLM call as CRITICAL.
+        if match.context in ("prose", "exclusion"):
+            continue
         if match.rule.role in (ROLE_SOURCE, ROLE_SINK, ROLE_EXEC):
             by_file[match.file.path].append(match)
 
@@ -275,16 +295,25 @@ def detect_dataflows(matches: Sequence[Match]) -> List[DataFlow]:
                 if current is None or distance < current[0]:
                     best_pairs[key] = (distance, src, sink)
 
+        scope = None
+        if docs_text and any(m.rule.capability == "environment.read" for m in sources) \
+                and any((m.rule.capability or "") in _OUTBOUND for m in sinks):
+            found = provider_mod.scope(sources[0].file, docs_text)
+            scope = found.describe() if found else None
+
         for (distance, src, sink) in best_pairs.values():
             confidence = Confidence.MEDIUM if distance <= FLOW_PROXIMITY_LINES else Confidence.LOW
             # Only a network sink has a URL destination. Attaching the nearest
             # URL to a subprocess call would read as "this shell command sends
             # data to that host", which is not what was observed.
-            destination = (
-                _nearest_url(sink.file, sink.line)
-                if (sink.rule.capability or "") in _OUTBOUND
-                else None
-            )
+            destination = None
+            if (sink.rule.capability or "") in _OUTBOUND:
+                if sink.rule.rule_id == "source.llm_api_call":
+                    # litellm's destination is the model's provider prefix;
+                    # the nearest URL literal would be a guess.
+                    destination = provider_mod.litellm_destination(sink.file, sink.line)
+                else:
+                    destination = _nearest_url(sink.file, sink.line)
             flows.append(
                 DataFlow(
                     source=src.rule.capability or src.rule.rule_id,
@@ -297,13 +326,19 @@ def detect_dataflows(matches: Sequence[Match]) -> List[DataFlow]:
                         Evidence(path=path, line=sink.line, snippet=snippet(sink.text),
                                  detail="sink"),
                     ],
+                    provider_scope=(
+                        scope
+                        if src.rule.capability == "environment.read"
+                        and (sink.rule.capability or "") in _OUTBOUND
+                        else None
+                    ),
                 )
             )
 
     # Closest pairs first: proximity is the whole signal, so the tightest
     # chains belong at the top.
     flows.sort(key=lambda f: (-f.confidence.rank, f.source, f.sink))
-    return flows[:MAX_FLOWS_REPORTED]
+    return flows if limit is None else flows[:limit]
 
 
 # Source capabilities whose pairing with an outbound sink is worth a finding of
@@ -332,6 +367,31 @@ def dataflow_findings(flows: Sequence[DataFlow]) -> List[Finding]:
             continue
         severity, subject = entry
         destination = flow.destination or "a destination this analysis could not resolve"
+        if flow.provider_scope and flow.source == "environment.read":
+            # Still reported, with both lines - only no longer a verdict on
+            # its own. Any one unresolved call, bulk read or undocumented host
+            # in the file and this branch is never taken (provider.py).
+            findings.append(
+                Finding(
+                    rule_id=f"dataflow.{flow.source}__{flow.sink}",
+                    area=Area.NETWORK,
+                    severity=Severity.LOW,
+                    confidence=Confidence.LOW,
+                    title="Provider credential read near a call to that provider",
+                    explanation=(
+                        "The same file reads environment variables and makes an outbound "
+                        + (f"call nearby ({flow.destination}). " if flow.destination else "call nearby. ")
+                        + f"Rated LOW rather than HIGH because {flow.provider_scope}. "
+                        "That is the shape of an API client using "
+                        "its own key. mcp-vet still cannot prove which value reaches which "
+                        "call, so read the two lines if the server will hold a key you care "
+                        "about."
+                    ),
+                    evidence=list(flow.evidence),
+                    remediation=None,
+                )
+            )
+            continue
         findings.append(
             Finding(
                 rule_id=f"dataflow.{flow.source}__{flow.sink}",

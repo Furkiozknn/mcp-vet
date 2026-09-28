@@ -14,7 +14,7 @@ import re
 from typing import List, Sequence
 
 from .models import Area, Confidence, Evidence, Finding, Severity
-from .scanning import ScanResult, ScannedFile, snippet
+from .scanning import ScanResult, ScannedFile, line_search, snippet
 
 _REMOTE_PIPE = re.compile(r"(?:curl|wget)[^\n|;]{0,200}\|\s*(?:sudo\s+)?(?:ba|z|d)?sh")
 _REMOTE_FETCH = re.compile(r"(?:curl|wget|Invoke-WebRequest)\s+[^\n]{0,200}https?://")
@@ -85,9 +85,7 @@ def _remote_execution(result: ScanResult) -> List[Finding]:
         if not interesting:
             continue
         for index, line in enumerate(scanned.lines, start=1):
-            if len(line) > 2000:
-                continue
-            if _REMOTE_PIPE.search(line) and _line_executes_pipe(scanned.path, line):
+            if line_search(_REMOTE_PIPE, line) and _line_executes_pipe(scanned.path, line):
                 hits.append(Evidence(path=scanned.path, line=index, snippet=snippet(line)))
 
     if not hits:
@@ -152,7 +150,7 @@ def _dockerfile(result: ScanResult) -> List[Finding]:
         downloads = [
             Evidence(path=scanned.path, line=i, snippet=snippet(line))
             for i, line in enumerate(scanned.lines, start=1)
-            if len(line) <= 2000 and _BINARY_DOWNLOAD.search(line)
+            if line_search(_BINARY_DOWNLOAD, line)
         ]
         if downloads:
             findings.append(

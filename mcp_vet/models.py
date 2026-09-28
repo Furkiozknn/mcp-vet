@@ -244,6 +244,10 @@ class DataFlow:
     destination: Optional[str]
     confidence: Confidence
     evidence: List[Evidence] = field(default_factory=list)
+    # Set when every credential the file reads is named for a documented,
+    # literal destination it calls (see provider.py). Explains a lowered
+    # finding; the flow itself is reported unchanged.
+    provider_scope: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -252,6 +256,7 @@ class DataFlow:
             "destination": self.destination,
             "confidence": self.confidence.value,
             "evidence": [e.to_dict() for e in self.evidence],
+            **({"provider_scope": self.provider_scope} if self.provider_scope else {}),
         }
 
 

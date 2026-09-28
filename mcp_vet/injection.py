@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 from .models import Area, Confidence, Evidence, Finding, Severity
-from .scanning import ScannedFile, snippet
+from .scanning import ScannedFile, line_finditer, line_search, snippet
 
 # Phrases that only make sense if the reader is a model being redirected.
 _OVERRIDE = re.compile(
@@ -226,9 +226,7 @@ def _python_tool_docstrings(scanned: ScannedFile) -> List[ToolText]:
 def _description_fields(scanned: ScannedFile) -> List[ToolText]:
     out: List[ToolText] = []
     for index, line in enumerate(scanned.lines, start=1):
-        if len(line) > 4000:
-            continue
-        for match in _DESCRIPTION_FIELD.finditer(line):
+        for match in line_finditer(_DESCRIPTION_FIELD, line):
             text = match.group(1).strip()
             if text:
                 out.append(ToolText(path=scanned.path, line=index, text=text,
@@ -293,7 +291,7 @@ def analyze(files: Sequence[ScannedFile], docs: Optional[Sequence[ScannedFile]] 
             hits = [
                 Evidence(path=scanned.path, line=i, snippet=snippet(line, limit=240))
                 for i, line in enumerate(scanned.lines, start=1)
-                if len(line) <= 2000 and signal.regex.search(line)
+                if line_search(signal.regex, line)
             ]
             if hits:
                 findings.append(

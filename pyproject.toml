@@ -1,6 +1,6 @@
 [project]
 name = "mcp-vet"
-version = "0.5.0"
+version = "0.6.0"
 description = "Trust and security auditing for MCP servers: capabilities, credentials, data flow, dependencies, provenance"
 readme = "README.md"
 requires-python = ">=3.9"

@@ -71,7 +71,10 @@ def _c(pattern: str) -> Pattern:
 EXECUTION_RULES: List[Rule] = [
     Rule(
         rule_id="source.shell_true",
-        regex=_c(r"shell\s*=\s*True"),
+        # A keyword argument: after `(` or `,`, or first on a continuation
+        # line. `print("never use shell=True")` is a sentence about the flag,
+        # and rating it HIGH / DO NOT INSTALL punishes the server that warns.
+        regex=_c(r"(?:[(,]|^)\s*shell\s*=\s*True\b"),
         extensions=PY,
         title="Subprocess invoked through a shell",
         explanation=(
@@ -91,7 +94,13 @@ EXECUTION_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.os_system",
-        regex=_c(r"\bos\.system\s*\("),
+        # `from os import system` and `__import__("os").system(` reach the
+        # same call without ever spelling `os.system(`.
+        regex=_c(
+            r"\bos\.system\s*\("
+            r"|^\s*from\s+os\s+import\b[^#\n]*\bsystem\b"
+            r"|__import__\(\s*['\"]os['\"]\s*\)\s*\.\s*system\b"
+        ),
         extensions=PY,
         title="os.system() executes a shell command string",
         explanation=(
@@ -106,7 +115,11 @@ EXECUTION_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.os_popen",
-        regex=_c(r"\bos\.popen\s*\("),
+        regex=_c(
+            r"\bos\.popen\s*\("
+            r"|^\s*from\s+os\s+import\b[^#\n]*\bpopen\b"
+            r"|__import__\(\s*['\"]os['\"]\s*\)\s*\.\s*popen\b"
+        ),
         extensions=PY,
         title="os.popen() executes a shell command string",
         explanation="Same shell-injection surface as os.system, with a pipe attached.",
@@ -134,7 +147,19 @@ EXECUTION_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.node_exec",
-        regex=_c(r"\b(?:child_process\s*\.\s*)?exec(?:Sync)?\s*\("),
+        # `/re/.exec(s)` and `pattern.exec(s)` are RegExp methods, not a
+        # shell: a JS server using a regex was rated HIGH and "DO NOT INSTALL"
+        # for it (GLips/Figma-Context-MCP, src/transformers/text.ts). A method
+        # call counts only on child_process itself, its require(), or the
+        # names it is conventionally bound to; a bare call is the
+        # destructured `const { exec } = require("child_process")`.
+        regex=_c(
+            r"(?:\bchild_process\s*\.\s*"
+            r"|\brequire\(\s*['\"](?:node:)?child_process['\"]\s*\)\s*\.\s*"
+            r"|\b(?:cp|childProcess|child|proc)\s*\.\s*"
+            r"|(?<![\w$.]))"
+            r"exec(?:Sync)?\s*\("
+        ),
         extensions=JS,
         title="child_process.exec() runs a command through a shell",
         explanation=(
@@ -288,7 +313,20 @@ FILESYSTEM_RULES: List[Rule] = [
     ),
     Rule(
         rule_id="source.chmod_exec",
-        regex=_c(r"chmod\s+(?:\+x|[0-7]*7[0-7]*)\b|os\.chmod\s*\([^)\n]{0,80}0o7"),
+        # What makes a file runnable by someone: `+x` in any form, a numeric
+        # mode that gives the group or others execute, or the stat.S_IX*/S_IEXEC
+        # bits. An owner-only mode - 0o700, 0o600, stat.S_IRWXU - is the idiom
+        # for *restricting* a private directory (a directory needs x to be
+        # entered), and was reported as "marks a file executable" until this
+        # changed. Running a file needs an exec call, which has rules of its own.
+        # `mode & 0o777` is a mask that keeps what a file already had, not a
+        # grant (modelcontextprotocol/servers restores a file's mode that way).
+        regex=_c(
+            r"chmod\s+(?:-R\s+)?(?:[ugoa]*\+[rwst]*x|0?[0-7]?[0-7](?:[1357][0-7]|[0-7][1357])\b)|"
+            r"chmod(?:Sync)?\s*\([^)\n]{0,80}?(?<![\w.])(?<!&)(?<!&\s)(?:0o|0)?[0-7]?[0-7](?:[1357][0-7]|[0-7][1357])\b|"
+            r"chmod(?:Sync)?\s*\([^)\n]{0,80}?['\"][0-7]?[0-7](?:[1357][0-7]|[0-7][1357])['\"]|"
+            r"chmod(?:Sync)?\s*\([^)\n]{0,80}?\bS_I(?:EXEC|XUSR|XGRP|XOTH|RWXG|RWXO)\b"
+        ),
         extensions=ANY,
         title="Marks a file executable",
         explanation=(
@@ -311,13 +349,37 @@ NETWORK_RULES: List[Rule] = [
         rule_id="source.http_client",
         regex=_c(
             r"\brequests\.(?:get|post|put|patch|delete|request)\s*\(|"
-            r"\bhttpx\.(?:get|post|put|patch|delete|request|AsyncClient|Client)\s*\(|"
+            r"\bhttpx2?\.(?:get|post|put|patch|delete|request|stream|AsyncClient|Client)\s*\(|"
+            r"\baiohttp\.(?:ClientSession|request)\s*\(|"
             r"urllib\.request\.urlopen\s*\(|"
             r"\bfetch\s*\(|\baxios\.|\bgot\s*\(|http\.request\s*\("
         ),
         extensions=PY | JS,
         title="Makes outbound HTTP requests",
         explanation="The server can send data to network destinations.",
+        severity=Severity.INFO,
+        confidence=Confidence.HIGH,
+        capability="network.external",
+        role=ROLE_SINK,
+        informational_only=True,
+    ),
+    Rule(
+        rule_id="source.llm_api_call",
+        # litellm is an HTTP client with a model name where the URL would be:
+        # `litellm.acompletion(model="groq/...")` is a request to Groq. Before
+        # this rule a server built on it had no outbound call at all, as far as
+        # this tool could tell - three servers on this account among them.
+        regex=_c(
+            r"\blitellm\.a?(?:completion|text_completion|embedding|image_generation|"
+            r"image_edit|speech|transcription|responses|rerank|moderation)\s*\("
+        ),
+        extensions=PY,
+        title="Calls a hosted model API through litellm",
+        explanation=(
+            "litellm sends the request to whichever provider the model name selects "
+            "(`groq/...`, `openai/...`), so this is an outbound call even though no "
+            "URL is written next to it."
+        ),
         severity=Severity.INFO,
         confidence=Confidence.HIGH,
         capability="network.external",

@@ -7,7 +7,7 @@ tested as strictly as "malicious gets caught".
 """
 from __future__ import annotations
 
-from mcp_vet import source
+from mcp_vet import patterns, source
 from mcp_vet.audit import audit_directory
 from mcp_vet.models import Confidence, Severity
 from mcp_vet.scanning import scan_tree, source_files
@@ -137,3 +137,37 @@ class TestObfuscation:
         matches = source.scan_matches([scanned])
         assert source.matches_to_findings(matches) == []
         assert source.combination_findings(matches) == []
+
+
+class TestNodeExecIsTheShellNotRegExp:
+    """`source.node_exec` once read `/re/.exec(s)` as child_process.exec().
+
+    GLips/Figma-Context-MCP has exactly one line of that shape in its shipped
+    code (src/transformers/text.ts), and it was enough to rate the whole
+    server HIGH and print DO NOT INSTALL.
+    """
+
+    RULE = next(r for r in patterns.ALL_RULES if r.rule_id == "source.node_exec")
+
+    def hits(self, line):
+        return bool(self.RULE.regex.search(line))
+
+    def test_regexp_methods_are_not_a_shell(self):
+        for line in (
+            "const match = /^(\\s*)([\\s\\S]*?)(\\s*)$/.exec(text);",
+            "const m = pattern.exec(input)",
+            "new RegExp(expr).exec(s)",
+            "await db.exec(sql)",
+        ):
+            assert not self.hits(line), line
+
+    def test_child_process_exec_is_still_caught(self):
+        for line in (
+            "child_process.exec(cmd)",
+            "require('child_process').exec(cmd)",
+            'require("node:child_process").execSync(cmd)',
+            "cp.exec(`git ${ref}`)",
+            "const out = execSync(command)",
+            "exec(cmd, (err, stdout) => {})",
+        ):
+            assert self.hits(line), line

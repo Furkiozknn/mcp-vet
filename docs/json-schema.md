@@ -83,8 +83,10 @@ does not recognise; it is not an accusation.
 
 ### evidence
 
-`path`, `line`, `snippet`, `detail` — all optional, absent keys omitted.
-Snippets are sanitized and length-capped.
+`path`, `line`, `snippet`, `detail`, `context` — all optional, absent keys
+omitted. Snippets are sanitized and length-capped. `context` is `"prose"` (a
+comment or docstring) or `"exclusion"` (an entry in a denylist-shaped
+literal); such evidence is reported but does not set the headline.
 
 ### credential
 
@@ -114,8 +116,16 @@ Only the **name** is ever recorded. mcp-vet does not read credential values.
 ```
 
 Reports co-location within one file, **not proven taint**. `destination` is
-present only for network sinks; it is `null` for shell and process sinks.
-Confidence never exceeds `MEDIUM`.
+present only for network sinks; it is `null` for shell and process sinks. For
+a litellm call it is the provider host its model prefix selects. Confidence
+never exceeds `MEDIUM`.
+
+`provider_scope` (string, optional) is present when every credential the file
+reads is named for a provider it calls, every call names its destination in
+the source, and the documentation names each provider. The matching finding
+is then `LOW` instead of `HIGH`; the text says why. At most 12 flows are
+listed; findings are drawn from all of them, and `limitations` says how many
+were left out.
 
 ## Exit codes
 
