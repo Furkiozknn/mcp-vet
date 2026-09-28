@@ -112,7 +112,7 @@ _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|
 # Bidirectional overrides and invisible formatting characters. These let source
 # render in an order different from how it executes.
 _BIDI_AND_INVISIBLE = re.compile(
-    "[‪-‮⁦-⁩​-‏؜﻿  ]"
+    "[\u202a-\u202e\u2066-\u2069\u200b-\u200f\u061c\ufeff\u2028\u2029]"
 )
 
 # Remaining C0 controls, keeping tab and newline which are legitimate.

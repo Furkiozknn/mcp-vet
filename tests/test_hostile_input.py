@@ -48,10 +48,10 @@ class TestTerminalEscapeNeutralisation:
         assert "\x00" not in cleaned
         assert "\x07" not in cleaned
 
-    @pytest.mark.parametrize("raw", ["if (x) {‮ // }‬", "a​b", "c⁦d⁩"])
+    @pytest.mark.parametrize("raw", ["if (x) {\u202e // }\u202c", "a\u200bb", "c\u2066d\u2069"])
     def test_bidi_and_invisible_characters_are_removed(self, raw):
         cleaned = sanitize_text(raw)
-        for char in "‮‬​⁦⁩":
+        for char in "\u202e\u202c\u200b\u2066\u2069":
             assert char not in cleaned
 
     def test_tabs_and_newlines_survive(self):
@@ -69,7 +69,7 @@ class TestTerminalEscapeNeutralisation:
     def test_no_escape_survives_into_a_rendered_report(self):
         report = audit_directory(fixture("hostile_text"), target="acme/hostile")
         text = render_text(report, verbose=True)
-        for bad in ("\x1b", "\x00", "\x07", "‮", "​"):
+        for bad in ("\x1b", "\x00", "\x07", "\u202e", "\u200b"):
             assert bad not in text
 
     def test_report_emits_no_escape_sequences_of_its_own(self):
