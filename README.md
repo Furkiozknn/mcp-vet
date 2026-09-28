@@ -1,5 +1,8 @@
 ![mcp-vet](assets/banner.svg)
 
+<p align="center"><img src="docs/reel/reel.gif" alt="mcp-vet - 15-second motion reel" width="720"></p>
+<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
+
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-8effc2?style=flat-square&labelColor=0a120f)](LICENSE)
