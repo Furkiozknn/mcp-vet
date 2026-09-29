@@ -55,7 +55,38 @@ OWNER_REPO_RE = re.compile(r"\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 
 def valid_owner_repo(value: str) -> bool:
-    return bool(OWNER_REPO_RE.match(value))
+    """`owner/repo` as GitHub spells it.
+
+    `.` and `..` match the character class but are path segments, not names:
+    `../checkout` used to reach the API as `/repos/../checkout` - a request
+    for something that is not a repository - and was answered with a 404 that
+    read as if the repository had been mistyped.
+    """
+    if not OWNER_REPO_RE.match(value):
+        return False
+    return not any(part in (".", "..") for part in value.split("/"))
+
+
+def _looks_like_path(value: str) -> bool:
+    """A local folder typed where `<owner>/<repo>` belongs.
+
+    The commonest first-run mistake: `mcp-vet audit ./checkout`, meaning the
+    folder just cloned. Say what to type instead of only what was wrong.
+    """
+    if os.path.isdir(value):
+        return True
+    return (
+        value.startswith((".", "~", "/", "\\"))
+        or "\\" in value
+        or bool(re.match(r"\A[A-Za-z]:", value))
+    )
+
+
+def _path_hint(value: str) -> str:
+    return (
+        "hint: to audit a folder on disk, use\n"
+        f"      mcp-vet audit --offline --path {sanitize_text(value)}"
+    )
 
 
 def _path_problem(path: Optional[str], flag: str = "--path") -> Optional[str]:
@@ -68,7 +99,8 @@ def _path_problem(path: Optional[str], flag: str = "--path") -> Optional[str]:
     """
     if path is None or os.path.isdir(path):
         return None
-    return f"{flag} {sanitize_text(path)!r} is not a directory"
+    why = "it is a file - pass the folder that contains it" if os.path.isfile(path) else "it does not exist"
+    return f"{flag} {sanitize_text(path)!r} is not a directory ({why})"
 
 
 def _nothing_read(report) -> Optional[str]:
@@ -91,6 +123,19 @@ def _positive_int(value: str) -> int:
     return number
 
 
+class _Help(argparse.HelpFormatter):
+    """Wrap a one-paragraph description, keep a hand-laid example block as written.
+
+    `RawDescriptionHelpFormatter` would stop wrapping the description too, and
+    a 300-character line is worse to read than a wrapped one.
+    """
+
+    def _fill_text(self, text, width, indent):  # type: ignore[override]
+        if "\n" not in text:
+            return super()._fill_text(text, width, indent)
+        return "".join(indent + line for line in text.splitlines(True))
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse, except a usage error exits 4 instead of 2.
 
@@ -101,7 +146,10 @@ class _Parser(argparse.ArgumentParser):
 
     def error(self, message: str):  # type: ignore[override]
         self.print_usage(sys.stderr)
-        self.exit(risk_mod.EXIT_ERROR, f"{self.prog}: error: {message}\n")
+        self.exit(
+            risk_mod.EXIT_ERROR,
+            f"{self.prog}: error: {message}\nRun `{self.prog} --help` for examples.\n",
+        )
 
 
 def _evaluate_for_table(meta) -> dict:
@@ -190,12 +238,15 @@ def cmd_audit(args: argparse.Namespace) -> int:
         return risk_mod.EXIT_ERROR
     if args.offline:
         if not args.path:
-            print("error: --offline requires --path <directory>", file=sys.stderr)
+            print("error: --offline requires --path <directory>\n"
+                  "hint: mcp-vet audit --offline --path ./checkout", file=sys.stderr)
             return risk_mod.EXIT_ERROR
         report = audit_directory(args.path, purpose=args.purpose or "", target=args.repo or args.path)
     else:
         if not args.repo:
-            print("error: audit needs <owner>/<repo>, or --offline --path <directory>",
+            print("error: audit needs <owner>/<repo>, or --offline --path <directory>\n"
+                  "hint: mcp-vet audit --offline --path ./checkout   (a folder you cloned)\n"
+                  "      mcp-vet audit owner/repo --path ./checkout  (plus GitHub metadata)",
                   file=sys.stderr)
             return risk_mod.EXIT_ERROR
         report = audit_repository(
@@ -235,6 +286,8 @@ class _Subparsers:
 
     def add_parser(self, name: str, **kwargs) -> argparse.ArgumentParser:
         kwargs.setdefault("allow_abbrev", False)
+        # Example blocks in an epilog are laid out by hand; see _Help.
+        kwargs.setdefault("formatter_class", _Help)
         return self._sub.add_parser(name, **kwargs)
 
 
@@ -297,9 +350,25 @@ def build_parser() -> argparse.ArgumentParser:
             "then shows you, with the file and line for every claim. It never decides "
             "that something is safe, and it never installs anything."
         ),
+        formatter_class=_Help,
         epilog=(
-            "Exit codes: 0 nothing above INFO, 1 low/medium, 2 high, 3 critical, "
-            "4 mcp-vet could not complete (including a usage error)."
+            "Start here (no network, nothing is installed or run):\n"
+            "  git clone --depth 1 https://github.com/<owner>/<server> ./checkout\n"
+            "  mcp-vet audit --offline --path ./checkout\n"
+            "\n"
+            "More:\n"
+            "  mcp-vet audit owner/repo --path ./checkout   add GitHub metadata + registry provenance\n"
+            "  mcp-vet check owner/repo                     metadata only - reads no source\n"
+            "  mcp-vet search \"discord mcp\"                 find candidates on GitHub\n"
+            "  mcp-vet registry discord                     find candidates in the MCP Registry\n"
+            "  mcp-vet diff --before-path ./v1 --after-path ./v2\n"
+            "                                               what capability did an update gain?\n"
+            "  mcp-vet report --offline --path ./checkout   the same audit as JSON, for scripts\n"
+            "\n"
+            "Exit codes: 0 nothing above INFO, 1 low/medium, 2 high, 3 critical,\n"
+            "4 mcp-vet could not complete (including a usage error).\n"
+            "\n"
+            "'Nothing above INFO' is not 'safe': it means these checks found nothing."
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -320,8 +389,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument("repo", help="owner/repo")
     p_check.set_defaults(func=cmd_check)
 
-    p_audit = sub.add_parser("audit", parents=[net], help="Full analysis of one server")
-    p_audit.add_argument("repo", nargs="?", help="owner/repo")
+    p_audit = sub.add_parser(
+        "audit", parents=[net], help="Full analysis of one server",
+        description="Read a server's source and report capabilities, credentials, "
+                    "network destinations, data flows, install hooks and tool poisoning - "
+                    "each with a file and a line.",
+        epilog=(
+            "Examples:\n"
+            "  mcp-vet audit --offline --path ./checkout      folder only, no network\n"
+            "  mcp-vet audit owner/repo --path ./checkout     plus GitHub metadata and registry provenance\n"
+            "  mcp-vet audit --offline --path . --json        machine-readable\n"
+            "\n"
+            "<owner>/<repo> names a GitHub repository; a folder goes after --path.\n"
+            "mcp-vet never clones: run `git clone --depth 1 <url> ./checkout` yourself.\n"
+            "Exit codes: 0 nothing above INFO, 1 low/medium, 2 high, 3 critical, 4 could not complete."
+        ),
+    )
+    p_audit.add_argument("repo", nargs="?", help="owner/repo (a GitHub repository, not a folder)")
     p_audit.add_argument("--path", help="local checkout to analyze (source analysis needs this)")
     p_audit.add_argument("--offline", action="store_true",
                          help="analyze --path only; make no network requests")
@@ -336,6 +420,13 @@ def build_parser() -> argparse.ArgumentParser:
         "diff",
         parents=[net],
         help="Compare two versions: what capability did the newer one gain?",
+        epilog=(
+            "Examples:\n"
+            "  mcp-vet diff --before-path ./v1.2.0 --after-path ./v1.3.0\n"
+            "  mcp-vet diff owner/repo v1.2.0 v1.3.0     refs may be tags, branches or commit SHAs\n"
+            "\n"
+            "Exits non-zero when the newer version gained capability, so it can gate a bump."
+        ),
     )
     p_diff.add_argument("repo", nargs="?", help="owner/repo")
     p_diff.add_argument("before", nargs="?", help="earlier ref, e.g. v1.2.0")
@@ -344,12 +435,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_diff.add_argument("--after-path", help="local checkout of the later version")
     p_diff.set_defaults(func=cmd_diff)
 
-    p_report = sub.add_parser("report", parents=[net], help="Audit, emitting JSON by default")
+    p_report = sub.add_parser(
+        "report", parents=[net], help="Audit, emitting JSON by default",
+        description="`audit`, with JSON on stdout. Same exit codes as `audit`.",
+        epilog="Example:\n"
+               "  mcp-vet report --offline --path ./checkout > report.json\n"
+               "Schema: docs/json-schema.md",
+    )
     p_report.add_argument("repo", nargs="?", help="owner/repo")
-    p_report.add_argument("--path")
-    p_report.add_argument("--offline", action="store_true")
-    p_report.add_argument("--no-registry", action="store_true")
-    p_report.add_argument("--purpose")
+    p_report.add_argument("--path", help="local checkout to analyze (source analysis needs this)")
+    p_report.add_argument("--offline", action="store_true",
+                          help="analyze --path only; make no network requests")
+    p_report.add_argument("--no-registry", action="store_true", help="skip the MCP Registry lookup")
+    p_report.add_argument("--purpose", help="what the server claims to do (improves endpoint classification)")
     p_report.add_argument("--text", action="store_true", help="render text instead of JSON")
     p_report.set_defaults(func=cmd_report)
 
@@ -394,6 +492,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "<owner>/<repo> using letters, digits, '.', '_' or '-' only",
             file=sys.stderr,
         )
+        if _looks_like_path(repo):
+            print(_path_hint(repo), file=sys.stderr)
         return risk_mod.EXIT_ERROR
     if getattr(args, "no_cache", False):
         http_mod.set_cache_enabled(False)
@@ -401,13 +501,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         code = args.func(args)
     except NotFound as exc:
-        print(f"error: not found - {sanitize_text(exc.message)}", file=sys.stderr)
+        # exc.message already begins "not found: <url>"; say it once.
+        print(f"error: {sanitize_text(exc.message)}", file=sys.stderr)
+        if "/repos/" in exc.url:
+            print("hint: check the owner/repo spelling - GitHub answers 404 for a "
+                  "private repository too", file=sys.stderr)
         return risk_mod.EXIT_ERROR
     except RateLimited as exc:
         print(f"error: {sanitize_text(exc.message)}", file=sys.stderr)
         return risk_mod.EXIT_ERROR
     except FetchError as exc:
         print(f"error: {sanitize_text(exc.message)}", file=sys.stderr)
+        if exc.message.startswith("could not reach"):
+            print("hint: no network? `mcp-vet audit --offline --path ./checkout` "
+                  "needs none", file=sys.stderr)
         return risk_mod.EXIT_ERROR
     except KeyboardInterrupt:
         return risk_mod.EXIT_ERROR

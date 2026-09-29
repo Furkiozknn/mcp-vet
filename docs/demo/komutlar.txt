@@ -1,0 +1,48 @@
+# mcp-vet terminal demo: real commands, real output
+# tarih: 2026-09-30T00:54:27+03:00
+# surum: 0.6.0 (pip install . ile kuruldu, PATH'teki mcp-vet)
+# denetlenen: https://github.com/Furkiozknn/nvidia-nim-mcp @ da9618a 2026-09-22
+# her komut bash -c 'set -o pipefail; ...' ile bos bir klasorde kosuldu; hicbir satir elle yazilmadi
+
+$ mcp-vet --version
+mcp-vet 0.6.0
+[cikis kodu 0] (0.70 s)
+
+$ git clone -q --depth 1 https://github.com/Furkiozknn/nvidia-nim-mcp ./checkout
+[cikis kodu 0] (1.33 s)
+
+$ mcp-vet audit --offline --path ./checkout --quiet
+LOW  ./checkout
+PROCEED WITH ORDINARY CARE. Minor findings only - read the source anyway, because a clean scan is not a review.
+[cikis kodu 1] (1.36 s)
+
+$ mcp-vet audit --offline --path ./checkout | head -n 22
+MCP VET
+──────────────────────────────────────────────────────────────
+
+Target          ./checkout
+
+OVERALL RISK    LOW
+
+Risk by area
+  Popularity integrity  NOT_FLAGGED  (not checked)
+  Repository trust      NOT_FLAGGED  (not checked)
+  Source code           MEDIUM  (not in the verdict)
+  Network               MEDIUM
+  Maintenance           NOT_FLAGGED  (not checked)
+  Provenance            NOT_FLAGGED  (not checked)
+
+Capabilities detected
+  encoding.base64  (nvidia_image.py:537)
+  environment.read  (nvidia_image.py:31)
+  filesystem.read  (nvidia_image.py:80)
+  filesystem.write  (tests/test_api_key_guard.py:184)
+  network.external  (nvidia_image.py:193)
+  package.install  (tests/test_output_dir.py:5)
+[cikis kodu 1] (1.30 s)
+
+$ mcp-vet audit ./checkout
+error: invalid repository './checkout' - expected <owner>/<repo> using letters, digits, '.', '_' or '-' only
+hint: to audit a folder on disk, use
+      mcp-vet audit --offline --path ./checkout
+[cikis kodu 4] (0.76 s)

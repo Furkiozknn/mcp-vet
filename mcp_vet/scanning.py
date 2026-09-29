@@ -111,6 +111,10 @@ class ScanResult:
     hit_file_limit: bool = False
     # Repo-relative paths of every lockfile the walk passed, read or not.
     lockfiles: List[str] = field(default_factory=list)
+    # Files the walk found and the operating system would not let it read
+    # (permission denied, an I/O error, a file that vanished mid-walk). These
+    # used to be filed under "binary", or skipped without a word.
+    skipped_unreadable: List[str] = field(default_factory=list)
 
     @property
     def paths(self) -> List[str]:
@@ -253,22 +257,23 @@ def iter_files(root: str, lockfiles: Optional[List[str]] = None) -> Iterator[str
                 yield rel
 
 
-def read_file(root: str, rel_path: str) -> Optional[ScannedFile]:
-    """Read one file, or return None if it is too large, binary or unreadable."""
+def _load(root: str, rel_path: str) -> Tuple[Optional[ScannedFile], str]:
+    """Read one file. The second value says why there is no file: "large",
+    "binary" or "unreadable" - three different things a report must not blur."""
     full = os.path.join(root, rel_path)
     try:
         size = os.path.getsize(full)
     except OSError:
-        return None
+        return None, "unreadable"
     if size > MAX_FILE_BYTES:
-        return None
+        return None, "large"
     try:
         with open(full, "rb") as handle:
             raw = handle.read(MAX_FILE_BYTES)
     except OSError:
-        return None
+        return None, "unreadable"
     if looks_binary(raw):
-        return None
+        return None, "binary"
 
     text = raw.decode("utf-8", errors="replace")
     text = sanitize_text(text)
@@ -276,7 +281,12 @@ def read_file(root: str, rel_path: str) -> Optional[ScannedFile]:
     # is reported when it bites; a line limit was not, so code placed after
     # line 6000 of an ordinary-sized file used to go unread and unmentioned.
     lines = text.splitlines()
-    return ScannedFile(path=rel_path, text=text, lines=lines, size_bytes=size)
+    return ScannedFile(path=rel_path, text=text, lines=lines, size_bytes=size), "ok"
+
+
+def read_file(root: str, rel_path: str) -> Optional[ScannedFile]:
+    """Read one file, or return None if it is too large, binary or unreadable."""
+    return _load(root, rel_path)[0]
 
 
 def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:
@@ -289,6 +299,7 @@ def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:
     files: List[ScannedFile] = []
     too_large: List[Tuple[str, int]] = []
     binary: List[str] = []
+    unreadable: List[str] = []
     hit_limit = False
     lockfiles: List[str] = []
 
@@ -300,13 +311,14 @@ def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:
         try:
             size = os.path.getsize(full)
         except OSError:
+            unreadable.append(rel)
             continue
         if size > MAX_FILE_BYTES:
             too_large.append((rel, size))
             continue
-        scanned = read_file(root, rel)
+        scanned, why = _load(root, rel)
         if scanned is None:
-            binary.append(rel)
+            (unreadable if why == "unreadable" else binary).append(rel)
             continue
         files.append(scanned)
 
@@ -316,6 +328,7 @@ def scan_tree(root: str, max_files: int = MAX_FILES_SCANNED) -> ScanResult:
         skipped_binary=binary,
         hit_file_limit=hit_limit,
         lockfiles=lockfiles,
+        skipped_unreadable=unreadable,
     )
 
 

@@ -76,6 +76,18 @@ Restate it in one line before searching ("an MCP server that lets Claude
 control Discord", not "discord"). If the request is vague, ask **one**
 clarifying question rather than guessing scope.
 
+## Running the tool
+
+The commands below say `uv run python scripts/vet.py ...`. That path is
+relative to the folder holding this `SKILL.md` (for a personal install,
+`~/.claude/skills/mcp-vet/`), so run it from there or give the full path. If
+`mcp-vet` is installed (`pipx install git+https://github.com/Furkiozknn/mcp-vet`),
+`mcp-vet <same arguments>` does the same from anywhere.
+
+**Exit code 4 means mcp-vet could not look** (a network error, a path that is
+not a folder, nothing readable, a usage error). It is not a clean result:
+never report it as one. The message names what to run instead.
+
 ## Step 2 — Discover candidates
 
 ```bash
