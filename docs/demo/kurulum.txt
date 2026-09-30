@@ -1,0 +1,4 @@
+# uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet --version
+# tarih: 2026-09-30T00:54:43+03:00
+cold (empty uv cache): 12.83 s, exit 0, output 'mcp-vet 0.6.0'
+warm (same cache): 2.57 s, exit 0, output 'mcp-vet 0.6.0'

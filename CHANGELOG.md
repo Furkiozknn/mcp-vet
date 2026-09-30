@@ -1,5 +1,68 @@
 # Changelog
 
+## Unreleased - a first run that explains itself
+
+Found by running every README command in an empty environment (see
+`docs/DENETIM.md`). Exit codes and the JSON output are unchanged; only the
+words around them moved.
+
+### Fixed
+
+- **`mcp-vet audit ./checkout` asked GitHub for a repository called `.`.** `.`
+  and `..` are inside the owner/repo character class, so a folder typed where
+  `<owner>/<repo>` belongs became `/repos/./checkout` and came back as
+  `error: not found - not found: https://api.github.com/repos/./checkout`.
+  They are refused before any request, and a path-shaped argument now gets
+  `hint: mcp-vet audit --offline --path ./checkout`.
+- **A file the operating system refused to read was reported as "binary".**
+  Denying read access to one source file of a checkout produced `1 binary
+  file(s) were not analyzed` and NOT_FLAGGED; a file that could not even be
+  sized was skipped without a word. Both now count under `notes.skipped_unreadable`
+  and a limitation that says "could not be read (permission denied or an I/O
+  error) ... A clean result does not cover them."
+- A 404 said "not found" twice and did not mention that GitHub answers 404 for
+  a private repository too; an unreachable network did not say `--offline`
+  needs none.
+
+### Changed
+
+- `--help` opens with a command that works (clone, then
+  `mcp-vet audit --offline --path ./checkout`), lists one example per command,
+  and states the exit codes and that "nothing above INFO" is not "safe".
+  `audit`, `diff` and `report` have their own examples; every `report` flag
+  now has a help line (`--path`, `--offline`, `--no-registry` and `--purpose`
+  had none).
+- Errors that had one line now also print the command that would have worked:
+  `--offline` without `--path`, `audit` with no target, and `--path` that is a
+  file ("pass the folder that contains it") or does not exist. A usage error
+  points at `--help`.
+- README: the first screen is one sentence, one install command, a terminal
+  demo generated from real output (`scripts/demo-uret.py`, commands and exit
+  codes in `docs/demo/komutlar.txt`) and a use / do-not-use table. The example
+  report is the complete output rather than a truncation, the diff example is
+  a real run, and the response-cache table has a 30 September column: the cached
+  run is 3.5 s, not 0.23 s, because the scan itself now takes that long.
+- SKILL.md says where its relative `scripts/vet.py` paths start and that exit
+  code 4 is never a clean result.
+
+### Removed
+
+- The sound-track motion reel (`docs/reel/`), `assets/audit.gif` and
+  `assets/audit.svg`: none had a generator in the repository, and the SVG was an
+  abridgement of a run. They remain in git history.
+
+### Added
+
+- `scripts/demo-uret.py` and `scripts/demo-kayit.js`: run the demo commands for
+  real, write `docs/demo/komutlar.txt`, and record `demo.mp4`/`demo.gif`
+  (and, without committing it, a 1080x1920 silent recording).
+- `tests/test_first_run_messages.py`, `tests/test_readme_commands.py` and
+  `tests/test_unreadable_files.py`: the
+  words of every error and help text, and every `mcp-vet ...` line in the README
+  and SKILL.md against the real argument parser.
+- A CI step that a folder typed as `owner/repo` exits 4 and names the right
+  command.
+
 ## 0.6.0 — Blind spots closed, and five false positives found on its own siblings
 
 ### Fixed

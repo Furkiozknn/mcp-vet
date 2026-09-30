@@ -1,7 +1,33 @@
 ![mcp-vet](assets/banner.svg)
 
-<p align="center"><img src="docs/reel/reel.gif" alt="mcp-vet - 15-second motion reel" width="720"></p>
-<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
+**mcp-vet reads an MCP server's source before you install it and shows, with a file and a line for every claim, what it can do, which credentials it wants and where it can send data. It never runs what it audits.**
+
+```bash
+pipx install git+https://github.com/Furkiozknn/mcp-vet      # or, with nothing installed: uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet --help
+git clone --depth 1 https://github.com/<owner>/<server> ./checkout
+mcp-vet audit --offline --path ./checkout
+```
+
+<p align="center"><img src="docs/demo/demo.gif" alt="A terminal: mcp-vet --version, a git clone of a real MCP server, the one-line verdict LOW, the first 22 lines of the report with risk by area and capabilities each carrying a file and line, and the message shown when a folder is typed where owner/repo belongs" width="760"></p>
+<p align="center"><sub>18 seconds, 5 commands, nothing typed by hand: <a href="docs/demo/komutlar.txt">the exact commands, output and exit codes</a>, replayed. <a href="docs/demo/demo.mp4">MP4</a></sub></p>
+
+Installed from GitHub (it is not on PyPI yet), `uvx` from an empty cache took 12.7-19.1 s over three runs and the audit above 1.4 s: the first result in well under a minute. Measured on 30 September 2026, Windows 11, Python 3.12 ([`docs/demo/kurulum.txt`](docs/demo/kurulum.txt), [`docs/DENETIM.md`](docs/DENETIM.md)).
+
+| Use it when | Do not use it when |
+|---|---|
+| you are about to install or update an MCP server from GitHub or the MCP Registry, and want the evidence before you decide | you want a verdict: it never says *safe*, only what these checks did and did not find |
+| a script or CI job needs a gate: exit `0` nothing above INFO, `1` low/medium, `2` high, `3` critical, `4` could not look | the server is remote-only: the code you can read is not the code that runs |
+| an AI agent is doing the vetting: the [skill](#-the-claude-code-skill) treats repository text as data, never instructions | you need runtime behaviour, compiled binaries or a vulnerability database: none of those are examined |
+| you want to know what an update gained: `mcp-vet diff` | you want to audit your own machine or secrets: it reads one checkout |
+
+Python 3.9+ and nothing else. Exit codes, JSON output and every rule are documented below; a wrong first command tells you the right one:
+
+```text
+$ mcp-vet audit ./checkout
+error: invalid repository './checkout' - expected <owner>/<repo> using letters, digits, '.', '_' or '-' only
+hint: to audit a folder on disk, use
+      mcp-vet audit --offline --path ./checkout
+```
 
 <div align="center">
 
@@ -9,16 +35,10 @@
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-482%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-552%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
-
-<p align="center">
-  <img src="assets/audit.svg" alt="mcp-vet auditing nvidia-nim-mcp: capabilities with file and line including its outbound calls, network destinations classified, three findings, and a note on what it did not check" width="680">
-</p>
-
-<p align="center"><sub><i>A real run, abridged: <code>mcp-vet audit --offline --path ./nvidia-nim-mcp</code> (nvidia-nim-mcp @ <code>da9618a</code>). Every line above carries a file and a line number — including the ones that turned out to be fine.</i></sub></p>
 
 <p align="center"><i>We read the code, not the star count.</i></p>
 
@@ -47,21 +67,12 @@ gets out of the way. It never decides that something is safe.
 | 🚦 **Never installs blind** | The CLI is read-only by construction: it installs, clones and executes nothing. |
 | 🤖 **Safe for agent use** | Repository content is treated as data, never instructions — and sanitized before it reaches a terminal. |
 
-### Try it in 30 seconds
-
-Python 3.9+, nothing else. Clone the server you are thinking of installing,
-then point mcp-vet at the checkout — straight from this repository, no install
-step:
+`--path` is what enables source analysis. Drop `--offline` and add the
+`owner/repo` to include GitHub metadata and registry provenance:
 
 ```bash
-git clone --depth 1 https://github.com/<owner>/<server> ./checkout
-uvx --from git+https://github.com/Furkiozknn/mcp-vet mcp-vet audit --offline --path ./checkout
+mcp-vet audit owner/repo --path ./checkout
 ```
-
-The exit code is the verdict a script can read: `0` nothing above INFO, `1`
-low/medium, `2` high, `3` critical, `4` mcp-vet could not look. Drop
-`--offline` and add the `owner/repo` to include GitHub metadata and registry
-provenance.
 
 ---
 
@@ -154,12 +165,9 @@ a lead.
 
 ## 📋 Example report
 
-Real output, from `tests/fixtures/exfil_server` — a fixture that looks like a
-notes server and also ships your environment elsewhere:
-
-![mcp-vet auditing a server that looks like a notes server: capabilities with file and line, two credentials with their blast radius, an unexplained destination, and an environment-to-network data flow](assets/audit.gif)
-
-<sub>The same run, recorded. Nothing in it is typed by hand — the text below is what the command printed.</sub>
+Real output, complete, from `mcp-vet audit --offline --path tests/fixtures/exfil_server`
+in a clone of this repository — a fixture that looks like a notes server and also
+ships your environment elsewhere:
 
 ```text
 MCP VET
@@ -229,6 +237,13 @@ Findings
 
 Recommendation
   DO NOT INSTALL WITHOUT MANUAL REVIEW. Open the files cited in the findings above and decide for yourself before this runs on your machine.
+
+What this did not check
+  - No dependency manifest found in the scanned tree.
+  - No static analyzer can prove an MCP server is safe. mcp-vet matches known patterns; novel or deliberately obfuscated behaviour can pass it.
+  - Data-flow findings report that a sensitive read and an outbound call sit near each other in one file. That is co-location, not proven taint.
+  - Only the repository is examined. What a published package or a remote endpoint actually serves can differ from this source.
+  - Dependencies are enumerated, not audited. Vulnerability status is unavailable unless an advisory source was reachable and said otherwise.
 ```
 
 Exit code: `2`. Every claim carries a file and a line.
@@ -411,11 +426,17 @@ runs three. So the three searches go out together (fresh-term A/B: 11.8 s → 3.
 at a quiet hour, 130 s → 24 s under load), and every response is cached under
 `~/.cache/mcp-vet/` (`XDG_CACHE_HOME` respected):
 
-| `mcp-vet audit Furkiozknn/mcp-vet --path .` | wall time | requests |
-|---|---|---|
-| first run, registry under load | 55.2 s | 7 |
-| first run, registry answering from its own cache | 8.3 s | 7 |
-| any run within the hour after | 0.23 s | 0 |
+| `mcp-vet audit Furkiozknn/mcp-vet --path .` | 4 Sep | 30 Sep | requests |
+|---|---|---|---|
+| first run, registry under load | 55.2 s | not reproduced (load varies) | 7 |
+| first run, registry answering from its own cache | 8.3 s | 9.0 s | 7 |
+| any run within the hour after | 0.23 s | 3.5 s | 0 |
+| `--offline`, no metadata at all | - | 4.0 s | 0 |
+
+The last column of the 30 September rows is the point of the cache: it removes
+the network, not the reading. This repository has grown since 4 September, so
+the source scan itself now takes about 3.5-4 s and a cached run is no longer
+near zero. (Windows 11, Python 3.12; the 4 September column is kept as measured.)
 
 The cache is a speed-up with an audit trail, never a source of truth:
 
@@ -445,10 +466,19 @@ one that was fine at `v1.2.0`, got read and approved, and quietly grew shell
 execution at `v1.3.0`. Nobody re-reads a patch bump.
 
 ```bash
-mcp-vet diff owner/repo v1.2.0 v1.3.0
+mcp-vet diff --before-path ./v1.2.0 --after-path ./v1.3.0
+mcp-vet diff owner/repo v1.2.0 v1.3.0     # tags, branches or commit SHAs
 ```
 
+Real output (first lines), from `mcp-vet diff --before-path tests/fixtures/clean_server --after-path tests/fixtures/exfil_server`:
+
 ```text
+MCP VET - version diff
+──────────────────────────────────────────────────────────────
+
+Comparing       clean_server -> exfil_server
+Analysis        both trees in full
+
 Capabilities gained
   + environment.read
   + process.spawn
@@ -456,12 +486,13 @@ Capabilities gained
 
 Credentials newly requested
   + GITHUB_TOKEN
+  + OPENAI_API_KEY
 
 Network destinations added
   + telemetry-collect.example.net
 
-  [HIGH/MEDIUM confidence] New capability since v1.2.0: shell.execute
-      v1.3.0 can do something v1.2.0 could not...
+Findings
+  [HIGH/MEDIUM confidence] New capability since clean_server: shell.execute
 ```
 
 Exits non-zero when a version gains capability, so it can gate an automated
@@ -574,7 +605,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**482 tests**, no network access in any of them. Beyond the analyzers, one
+**552 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:

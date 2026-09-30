@@ -99,6 +99,19 @@ jobs:
           test "$flag" -eq 4 || { echo "unknown flag: expected 4, got $flag"; exit 1; }
           test "$missing" -eq 4 || { echo "missing path: expected 4, got $missing"; exit 1; }
 
+      # A folder typed where <owner>/<repo> belongs is the commonest first-run
+      # mistake. It must exit 4 without asking GitHub anything, and the message
+      # must say what to type instead. --help must show the exit-code contract.
+      - name: A folder typed as owner/repo exits 4 and names the right command
+        run: |
+          set +e
+          out=$(mcp-vet audit ./checkout 2>&1)
+          code=$?
+          set -e
+          test "$code" -eq 4 || { echo "expected exit 4, got $code"; exit 1; }
+          echo "$out" | grep -q -e "--offline --path ./checkout" || { echo "no hint in: $out"; exit 1; }
+          mcp-vet --help | grep -q "Exit codes: 0 nothing above INFO" || { echo "help lost the exit codes"; exit 1; }
+
       # `report` is `audit` with JSON output, so it carries the same
       # severity exit code - 2 here, because the fixture is a HIGH finding.
       # The JSON on stdout is still complete and must still parse.

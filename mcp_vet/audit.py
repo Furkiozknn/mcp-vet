@@ -128,6 +128,12 @@ def _scan_notes(report: AuditReport, result: ScanResult, dependency_report) -> N
             f"{len(result.skipped_binary)} binary file(s) were not analyzed. "
             "mcp-vet does not inspect compiled artifacts."
         )
+    if result.skipped_unreadable:
+        report.notes["skipped_unreadable"] = result.skipped_unreadable[:20]
+        report.limitations.append(
+            f"{len(result.skipped_unreadable)} file(s) could not be read (permission denied "
+            "or an I/O error) and were not analyzed. A clean result does not cover them."
+        )
     if result.hit_file_limit:
         report.limitations.append(
             "The file-count limit was reached; part of the tree was not scanned."
