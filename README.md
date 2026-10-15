@@ -539,6 +539,34 @@ must never share an exit code, or a broken gate reads as a passing one.
 The schema is versioned and documented in **[docs/json-schema.md](docs/json-schema.md)**.
 Output is byte-stable across runs, so two reports can be diffed directly.
 
+### SARIF for GitHub code scanning
+
+```bash
+mcp-vet audit --offline --path ./checkout --sarif > mcp-vet.sarif
+mcp-vet report --offline --path ./checkout --sarif
+```
+
+`--sarif` writes the same audit as a SARIF 2.1.0 log, so the findings show up
+as code-scanning alerts on the file and line they came from (upload it with
+`github/codeql-action/upload-sarif`). The exit code is unchanged. The mapping
+keeps mcp-vet's rules rather than inventing new ones:
+
+| mcp-vet | SARIF |
+|---|---|
+| `rule_id`, title, explanation, remediation | `rules[].id`, `shortDescription`, `fullDescription`, `help` |
+| CRITICAL / HIGH / MEDIUM / LOW | `security-severity` 9.5 / 8.0 / 5.5 / 3.0, `level` error / error / warning / warning |
+| INFO | `level` note, no `security-severity` |
+| confidence | rule `precision` and `properties.confidence` |
+| finding that does not set the verdict (only in tests, docs, a denylist or a comment) | `level` note, `properties.sets_verdict: false`, so a gate on errors agrees with the exit code |
+| every evidence line | the first is the result's location, the rest `relatedLocations` |
+| "What this did not check" | `invocations[0].toolExecutionNotifications`, level warning |
+
+Results get a `partialFingerprints` hash of rule, file and snippet (not the
+line number), so an unrelated edit above a finding does not reopen it as new.
+Findings from repository metadata or the registry have no file, so code
+scanning cannot place them; audit with `--offline --path` in CI, where every
+finding comes from a file.
+
 ---
 
 ## 📥 Install
