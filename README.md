@@ -567,6 +567,44 @@ Findings from repository metadata or the registry have no file, so code
 scanning cannot place them; audit with `--offline --path` in CI, where every
 finding comes from a file.
 
+### GitHub Action
+
+`action.yml` at the root of this repository is a composite action. It runs
+one offline audit, uploads the SARIF to code scanning, writes a findings table
+to the job summary, and fails the job at the severity you choose:
+
+```yaml
+jobs:
+  mcp-vet:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # for the SARIF upload
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Furkiozknn/mcp-vet@master   # pin a commit SHA in real use
+        with:
+          path: .            # the server to audit
+          fail-on: high      # critical | high | medium | low | none
+```
+
+| Input | Default | Meaning |
+|---|---|---|
+| `path` | `.` | directory to audit; check it out first, mcp-vet never clones |
+| `fail-on` | `high` | fail at this severity or above; `medium` and `low` are both exit code 1. Exit code 4 ("could not look") always fails |
+| `upload-sarif` | `true` | upload to code scanning (a private repository also needs GitHub Advanced Security) |
+| `category` | `mcp-vet` | code-scanning category, to keep several runs apart |
+| `sarif-file` | `$RUNNER_TEMP/mcp-vet.sarif` | where the SARIF goes, outside your checkout by default |
+| `purpose` | empty | what the server claims to do, for endpoint classification |
+
+Outputs: `exit-code`, `overall`, `findings`, `sarif-file`. The audit runs once,
+and the SARIF, the summary and the gate are all read from that one run, so
+they cannot disagree. The SARIF upload runs before the gate, so a failing run
+still leaves its alerts. Nothing is installed: mcp-vet is standard library
+only, and the action runs the copy you pinned. The body is
+`scripts/action_run.py`, so it behaves the same on Linux, macOS and Windows
+runners and has its own tests (`tests/test_action_run.py`).
+
 ---
 
 ## 📥 Install
