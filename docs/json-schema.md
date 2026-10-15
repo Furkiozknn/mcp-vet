@@ -140,6 +140,14 @@ were left out.
 **0 and 4 are deliberately distinct**: "found nothing" and "could not look"
 must never share an exit code, or a broken CI gate reads as a passing one.
 
+A shipped source file that was not read is a `HIGH` finding in area
+`source_code`, so it reaches `overall` and exit 2: `source.unanalyzed_too_large`
+(over the per-file limit; evidence `detail` gives the size),
+`source.unanalyzed_unreadable` (refused by the OS, or a NUL byte made it look
+binary) and `source.file_limit_reached` (no evidence; the file-count limit cut
+the walk short). `notes.skipped_*` and the matching `limitations` entries are
+unchanged.
+
 ## Stability
 
 Output is byte-stable across runs for the same input: findings sort by
