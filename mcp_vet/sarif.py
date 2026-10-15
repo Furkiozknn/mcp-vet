@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -69,16 +70,37 @@ _PRECISION = {
 }
 
 
-def _uri(path: str) -> str:
-    """A repository-relative path as a SARIF URI reference."""
-    return quote(path.replace("\\", "/").lstrip("/"), safe="/")
+def _uri(path: str, prefix: str = "") -> str:
+    """A path relative to the audited directory, as a URI relative to the checkout.
+
+    Evidence paths are relative to `--path`. Code scanning resolves a URI
+    against the root of the checkout, so auditing `--path server` from the
+    repository root needs `server/` in front, or no alert lands on its file.
+    """
+    joined = path.replace("\\", "/").lstrip("/")
+    if prefix:
+        joined = prefix.rstrip("/") + "/" + joined
+    return quote(joined, safe="/")
 
 
-def _location(evidence: Evidence) -> Optional[Dict[str, Any]]:
+def path_prefix_for(audited: str, root: Optional[str] = None) -> str:
+    """The audited directory relative to `root` (default: the working directory).
+
+    Empty when the audited directory is the root itself or lies outside it;
+    outside the checkout there is no prefix that would make the URI resolve.
+    """
+    root_abs = os.path.abspath(root or os.getcwd())
+    rel = os.path.relpath(os.path.abspath(audited), root_abs)
+    if rel == "." or rel == os.pardir or rel.startswith(os.pardir + os.sep):
+        return ""
+    return rel.replace(os.sep, "/")
+
+
+def _location(evidence: Evidence, prefix: str = "") -> Optional[Dict[str, Any]]:
     if not evidence.path:
         return None
     physical: Dict[str, Any] = {
-        "artifactLocation": {"uri": _uri(evidence.path), "uriBaseId": "%SRCROOT%"},
+        "artifactLocation": {"uri": _uri(evidence.path, prefix), "uriBaseId": "%SRCROOT%"},
     }
     if evidence.line:
         region: Dict[str, Any] = {"startLine": int(evidence.line)}
@@ -129,9 +151,9 @@ def _rule(finding: Finding) -> Dict[str, Any]:
     return rule
 
 
-def _result(finding: Finding, rule_index: int) -> Dict[str, Any]:
+def _result(finding: Finding, rule_index: int, prefix: str = "") -> Dict[str, Any]:
     sets_verdict = finding_sets_headline(finding)
-    locations = [loc for loc in (_location(e) for e in finding.evidence) if loc]
+    locations = [loc for loc in (_location(e, prefix) for e in finding.evidence) if loc]
     level = _LEVEL[finding.severity] if sets_verdict else "note"
     message = finding.title
     if finding.remediation:
@@ -166,8 +188,11 @@ def _result(finding: Finding, rule_index: int) -> Dict[str, Any]:
     return result
 
 
-def to_sarif(report: AuditReport) -> Dict[str, Any]:
-    """The whole report as one SARIF log with one run."""
+def to_sarif(report: AuditReport, path_prefix: str = "") -> Dict[str, Any]:
+    """The whole report as one SARIF log with one run.
+
+    `path_prefix` is prepended to every evidence path (see `path_prefix_for`).
+    """
     rules: List[Dict[str, Any]] = []
     rule_index: Dict[str, int] = {}
     results: List[Dict[str, Any]] = []
@@ -176,7 +201,7 @@ def to_sarif(report: AuditReport) -> Dict[str, Any]:
         if key not in rule_index:
             rule_index[key] = len(rules)
             rules.append(_rule(finding))
-        results.append(_result(finding, rule_index[key]))
+        results.append(_result(finding, rule_index[key], path_prefix))
 
     notifications = [
         {"level": "warning", "message": {"text": limitation}}
@@ -212,5 +237,5 @@ def to_sarif(report: AuditReport) -> Dict[str, Any]:
     return {"$schema": SARIF_SCHEMA, "version": SARIF_VERSION, "runs": [run]}
 
 
-def render_sarif(report: AuditReport) -> str:
-    return json.dumps(to_sarif(report), indent=2, ensure_ascii=False)
+def render_sarif(report: AuditReport, path_prefix: str = "") -> str:
+    return json.dumps(to_sarif(report, path_prefix), indent=2, ensure_ascii=False)
