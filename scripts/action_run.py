@@ -37,7 +37,7 @@ from mcp_vet.audit import audit_directory  # noqa: E402
 from mcp_vet.cli import _nothing_read, _path_problem  # noqa: E402
 from mcp_vet.models import AuditReport, Severity  # noqa: E402
 from mcp_vet.risk import finding_sets_headline  # noqa: E402
-from mcp_vet.sarif import render_sarif  # noqa: E402
+from mcp_vet.sarif import path_prefix_for, render_sarif  # noqa: E402
 
 # The lowest exit code that fails the gate for each fail-on value. LOW and
 # MEDIUM share exit code 1, so "low" and "medium" are the same threshold.
@@ -161,8 +161,11 @@ def run(environ: Dict[str, str], stderr: TextIO = sys.stderr) -> int:
     failed = gate_fails(exit_code, fail_on)
 
     os.makedirs(os.path.dirname(os.path.abspath(sarif_path)), exist_ok=True)
+    # Code scanning resolves URIs against the checkout, so `path: server`
+    # needs `server/` in front of every evidence path.
+    prefix = path_prefix_for(path, environ.get("GITHUB_WORKSPACE") or None)
     with open(sarif_path, "w", encoding="utf-8") as handle:
-        handle.write(render_sarif(report))
+        handle.write(render_sarif(report, prefix))
 
     _append(summary_file, summary_markdown(report, exit_code, fail_on, failed))
     _outputs(output_file, {

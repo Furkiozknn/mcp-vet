@@ -84,6 +84,14 @@ class TestRun:
         assert out["exit-code"] == "2"
         assert out["failed"] == "false"
 
+    def test_sarif_uris_are_relative_to_the_workspace(self, tmp_path):
+        workspace = os.path.dirname(fixture("poisoned_server"))
+        action_run.run(_env(tmp_path, fixture("poisoned_server"), GITHUB_WORKSPACE=workspace))
+        log = json.loads((tmp_path / "mcp-vet.sarif").read_text(encoding="utf-8"))
+        uris = {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+                for r in log["runs"][0]["results"] if "locations" in r}
+        assert "poisoned_server/server.py" in uris
+
     def test_custom_sarif_location(self, tmp_path):
         target = tmp_path / "nested" / "out.sarif"
         action_run.run(_env(tmp_path, fixture("clean_server"), MV_SARIF=str(target)))
