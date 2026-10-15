@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Sequence
 
+from . import annotations as annotations_mod
 from . import dependencies as deps_mod
 from . import injection as injection_mod
 from . import install as install_mod
@@ -81,6 +82,7 @@ def analyze_tree(result: ScanResult, purpose: str = "") -> dict:
     findings.extend(source_mod.dataflow_findings(all_flows))
     findings.extend(source_mod.combination_findings(matches))
     findings.extend(injection_mod.analyze(sources, docs))
+    findings.extend(annotations_mod.analyze(sources, matches))
     findings.extend(install_mod.analyze(result))
 
     dependency_report = deps_mod.analyze(result)
