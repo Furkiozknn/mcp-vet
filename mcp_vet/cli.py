@@ -41,7 +41,7 @@ from .popularity import assess as popularity_assess
 from .popularity import age_days, fork_ratio, is_suspicious
 from .models import Severity
 from .report import render_search_table, render_text
-from .sarif import render_sarif
+from .sarif import path_prefix_for, render_sarif
 from .scanning import sanitize_text
 
 
@@ -263,7 +263,9 @@ def cmd_audit(args: argparse.Namespace) -> int:
             return risk_mod.EXIT_ERROR
 
     if getattr(args, "sarif", False):
-        print(render_sarif(report))
+        # URIs relative to the directory mcp-vet was run from, which is the
+        # checkout root in CI, so `--path server` still lands on server/...
+        print(render_sarif(report, path_prefix_for(args.path) if args.path else ""))
     elif args.json:
         print(report.to_json())
     else:

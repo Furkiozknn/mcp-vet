@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -9,7 +10,7 @@ from mcp_vet import risk
 from mcp_vet.audit import audit_directory
 from mcp_vet.cli import main
 from mcp_vet.models import Area, AuditReport, Confidence, Evidence, Finding, Severity
-from mcp_vet.sarif import to_sarif
+from mcp_vet.sarif import path_prefix_for, to_sarif
 
 from helpers import fixture
 
@@ -51,9 +52,9 @@ class TestShape:
         assert len(log["runs"][0]["results"]) == len(report.findings)
         assert code == risk.exit_code_for(report.overall) == 3
 
-    def test_results_point_at_the_file_and_line_of_the_evidence(self, capsys):
-        _, log = _sarif_from_cli(capsys, "audit", "--offline", "--path",
-                                 fixture("poisoned_server"), "--sarif")
+    def test_results_point_at_the_file_and_line_of_the_evidence(self, capsys, monkeypatch):
+        monkeypatch.chdir(fixture("poisoned_server"))
+        _, log = _sarif_from_cli(capsys, "audit", "--offline", "--path", ".", "--sarif")
         located = [r for r in log["runs"][0]["results"] if "locations" in r]
         assert located
         for result in located:
@@ -188,6 +189,41 @@ class TestFingerprints:
         first = capsys.readouterr().out
         main(["audit", "--offline", "--path", fixture("exfil_server"), "--sarif"])
         assert capsys.readouterr().out == first
+
+
+class TestCheckoutRelativeUris:
+    """Code scanning resolves URIs against the checkout root, not against --path."""
+
+    def test_auditing_a_subdirectory_prefixes_it(self, capsys, monkeypatch):
+        monkeypatch.chdir(os.path.dirname(fixture("poisoned_server")))
+        _, log = _sarif_from_cli(capsys, "audit", "--offline", "--path", "poisoned_server", "--sarif")
+        uris = {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+                for r in log["runs"][0]["results"] if "locations" in r}
+        assert "poisoned_server/server.py" in uris
+        assert all(u.startswith("poisoned_server/") for u in uris)
+
+    def test_auditing_the_working_directory_adds_no_prefix(self, capsys, monkeypatch):
+        monkeypatch.chdir(fixture("poisoned_server"))
+        _, log = _sarif_from_cli(capsys, "audit", "--offline", "--path", ".", "--sarif")
+        uris = {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+                for r in log["runs"][0]["results"] if "locations" in r}
+        assert "server.py" in uris
+
+    def test_a_path_outside_the_working_directory_adds_no_prefix(self, tmp_path):
+        assert path_prefix_for(str(tmp_path), root=fixture("clean_server")) == ""
+
+    def test_nested_prefix_uses_forward_slashes(self, tmp_path):
+        nested = tmp_path / "a" / "b"
+        nested.mkdir(parents=True)
+        assert path_prefix_for(str(nested), root=str(tmp_path)) == "a/b"
+
+    def test_prefix_is_applied_to_related_locations_too(self):
+        finding = _finding()
+        finding.evidence.append(Evidence(path="other.py", line=9))
+        result = to_sarif(risk.finalize(AuditReport(target="t", findings=[finding])),
+                          path_prefix="srv")["runs"][0]["results"][0]
+        assert result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "srv/server.py"
+        assert result["relatedLocations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "srv/other.py"
 
 
 def test_paths_with_spaces_are_uri_encoded():

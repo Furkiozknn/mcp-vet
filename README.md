@@ -563,6 +563,8 @@ keeps mcp-vet's rules rather than inventing new ones:
 
 Results get a `partialFingerprints` hash of rule, file and snippet (not the
 line number), so an unrelated edit above a finding does not reopen it as new.
+URIs are relative to the directory mcp-vet runs from, the checkout root in CI,
+so `--path server` produces `server/index.ts` and the alert lands on the file.
 Findings from repository metadata or the registry have no file, so code
 scanning cannot place them; audit with `--offline --path` in CI, where every
 finding comes from a file.
