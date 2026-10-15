@@ -24,6 +24,22 @@ words around them moved.
   a private repository too; an unreachable network did not say `--offline`
   needs none.
 
+### Added
+
+- **Misleading tool annotations** (`annotations.read_only_contradicted`,
+  `annotations.non_destructive_contradicted`, area `capabilities`). A tool
+  whose literal `readOnlyHint: true` / `read_only_hint=True` is contradicted
+  by its own body (shell, process spawn, eval, delete, chmod, persistence,
+  package install: HIGH; a file write: MEDIUM), or whose `destructiveHint:
+  false` sits over a delete. Python claims are scoped to the decorated
+  function and followed through module-level `ToolAnnotations` constants
+  (MEDIUM confidence); JS/TS claims to the `registerTool(...)` / `.tool(...)`
+  call (LOW confidence). Computed hints and mentions in comments, docstrings
+  or denylists are not judged. Run against the official reference servers
+  (`filesystem`: 11 literal hints, `memory`: 9) and four of this user's own
+  servers, it raises nothing. Tests in `tests/test_annotations.py`, fixture
+  `tests/fixtures/lying_annotations`.
+
 ### Changed
 
 - `--help` opens with a command that works (clone, then
