@@ -4,9 +4,23 @@
 
 Found by running every README command in an empty environment (see
 `docs/DENETIM.md`). Exit codes and the JSON output are unchanged; only the
-words around them moved.
+words around them moved, with one exception: skipped source files now count
+toward the verdict (the first entry below).
 
 ### Fixed
+
+- **A source file the scan skipped left the verdict and the exit code clean.**
+  A payload in a 600 KB `server.py`, in a `.js` file with a NUL byte near the
+  top (filed as binary), in a file the OS refused, or past the 3000-file limit
+  produced one limitation line, NOT FLAGGED and exit 0, which a CI gate reads
+  as "passed". Each case is now a HIGH finding in `source_code`
+  (`source.unanalyzed_too_large`, `source.unanalyzed_unreadable`,
+  `source.file_limit_reached`), so it reaches `overall` and exit 2. Only
+  source extensions count; an oversized lockfile or README is still only a
+  limitation, and a skipped file under `tests/` is reported without setting
+  the headline. Auditing mini-creative-toolkit, voice-io-mcp, godot-refcheck,
+  repo-vet and mcp-vet itself raises none of the three. 10 new tests in
+  `tests/test_unanalyzed_files.py`.
 
 - **`mcp-vet audit ./checkout` asked GitHub for a repository called `.`.** `.`
   and `..` are inside the owner/repo character class, so a folder typed where
