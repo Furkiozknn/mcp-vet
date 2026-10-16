@@ -41,6 +41,7 @@ from .popularity import assess as popularity_assess
 from .popularity import age_days, fork_ratio, is_suspicious
 from .models import Severity
 from .report import render_search_table, render_text
+from .sarif import path_prefix_for, render_sarif
 from .scanning import sanitize_text
 
 
@@ -261,7 +262,11 @@ def cmd_audit(args: argparse.Namespace) -> int:
             print(f"error: {problem}", file=sys.stderr)
             return risk_mod.EXIT_ERROR
 
-    if args.json:
+    if getattr(args, "sarif", False):
+        # URIs relative to the directory mcp-vet was run from, which is the
+        # checkout root in CI, so `--path server` still lands on server/...
+        print(render_sarif(report, path_prefix_for(args.path) if args.path else ""))
+    elif args.json:
         print(report.to_json())
     else:
         print(render_text(report, verbose=args.verbose, quiet=args.quiet))
@@ -399,6 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  mcp-vet audit --offline --path ./checkout      folder only, no network\n"
             "  mcp-vet audit owner/repo --path ./checkout     plus GitHub metadata and registry provenance\n"
             "  mcp-vet audit --offline --path . --json        machine-readable\n"
+            "  mcp-vet audit --offline --path . --sarif       SARIF 2.1.0 for GitHub code scanning\n"
             "\n"
             "<owner>/<repo> names a GitHub repository; a folder goes after --path.\n"
             "mcp-vet never clones: run `git clone --depth 1 <url> ./checkout` yourself.\n"
@@ -411,7 +417,10 @@ def build_parser() -> argparse.ArgumentParser:
                          help="analyze --path only; make no network requests")
     p_audit.add_argument("--no-registry", action="store_true", help="skip the MCP Registry lookup")
     p_audit.add_argument("--purpose", help="what the server claims to do (improves endpoint classification)")
-    p_audit.add_argument("--json", action="store_true", help="machine-readable output")
+    p_audit_format = p_audit.add_mutually_exclusive_group()
+    p_audit_format.add_argument("--json", action="store_true", help="machine-readable output")
+    p_audit_format.add_argument("--sarif", action="store_true",
+                                help="SARIF 2.1.0 output, for GitHub code scanning")
     p_audit.add_argument("--verbose", action="store_true", help="include snippets and area summaries")
     p_audit.add_argument("--quiet", action="store_true", help="verdict line only")
     p_audit.set_defaults(func=cmd_audit)
@@ -448,7 +457,10 @@ def build_parser() -> argparse.ArgumentParser:
                           help="analyze --path only; make no network requests")
     p_report.add_argument("--no-registry", action="store_true", help="skip the MCP Registry lookup")
     p_report.add_argument("--purpose", help="what the server claims to do (improves endpoint classification)")
-    p_report.add_argument("--text", action="store_true", help="render text instead of JSON")
+    p_report_format = p_report.add_mutually_exclusive_group()
+    p_report_format.add_argument("--text", action="store_true", help="render text instead of JSON")
+    p_report_format.add_argument("--sarif", action="store_true",
+                                 help="render SARIF 2.1.0 instead of JSON (GitHub code scanning)")
     p_report.set_defaults(func=cmd_report)
 
     return parser
