@@ -24,6 +24,16 @@ words around them moved.
   a private repository too; an unreachable network did not say `--offline`
   needs none.
 
+### Added
+
+- **SARIF 2.1.0 output** (`mcp-vet audit --sarif`, `mcp-vet report --sarif`)
+  for GitHub code scanning. One result per finding, located on the evidence
+  file and line, with `security-severity` from the severity, `precision` from
+  the confidence, and level `note` for a finding that does not set the verdict
+  (so a gate on errors agrees with the exit code). Limitations travel as tool
+  notifications, so a partial audit does not read as a clean one. Exit codes
+  and the JSON output are unchanged. Tests in `tests/test_sarif.py`.
+
 ### Changed
 
 - `--help` opens with a command that works (clone, then
