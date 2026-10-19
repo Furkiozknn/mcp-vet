@@ -35,7 +35,7 @@ hint: to audit a folder on disk, use
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-552%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-563%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
@@ -152,6 +152,7 @@ AI agent, on hostile input*.
 | **Dependencies** | counts, pinning, git/URL sources, missing lockfiles (a lockfile is found at any size) |
 | **Data flow** | a sensitive read sitting near an outbound call, in one file; a provider's own key sent only to that documented provider is kept but rated LOW |
 | **Tool poisoning** | instruction override, role spoofing, concealment, secret solicitation, cross-tool redirection |
+| **Misleading annotations** | a tool marked `readOnlyHint: true` whose own body runs commands, deletes or writes files; a tool marked `destructiveHint: false` that deletes. Clients may skip confirmation for read-only tools, so a false hint removes a safeguard. Only literal hints are judged, scoped to the decorated function (Python) or the `registerTool` call (JS/TS) |
 | **Provenance** | registry/source mismatch, missing repository, remote-only servers |
 | **Repository trust** | archived, disabled, fork, licence, releases, staleness |
 | **Popularity integrity** | the original star/fork/age relationship |
@@ -523,6 +524,21 @@ mcp-vet audit owner/repo --path ./checkout --json | jq '.findings[] | select(.se
 `0` and `4` are deliberately distinct: *"found nothing"* and *"could not look"*
 must never share an exit code, or a broken gate reads as a passing one.
 
+The same rule covers *"looked at part of it"*. A source file the scan could not
+read is a **HIGH** finding, so it reaches the verdict and exit `2` instead of
+only a line under limitations:
+
+| `rule_id` | Raised when |
+|---|---|
+| `source.unanalyzed_too_large` | a source file is over the 512 KB per-file limit |
+| `source.unanalyzed_unreadable` | a source file was refused by the OS, or holds a NUL byte and was taken for binary |
+| `source.file_limit_reached` | the tree has more than 3000 readable files and the rest were not scanned |
+
+Only source extensions count (`.py`, `.js`, `.ts`, `.sh`, …): a 2 MB
+`package-lock.json` or README stays a limitation. Each skipped file is its own
+piece of evidence, so as everywhere else a file under `tests/` or `scripts/` is
+reported without setting the headline.
+
 ```yaml
 - name: Audit MCP server
   run: |
@@ -673,7 +689,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**552 tests**, no network access in any of them. Beyond the analyzers, one
+**641 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:

@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Sequence
 
+from . import annotations as annotations_mod
 from . import dependencies as deps_mod
 from . import injection as injection_mod
 from . import install as install_mod
@@ -39,7 +40,17 @@ from .models import (
     Severity,
     Status,
 )
-from .scanning import DOCS, ScanResult, file_role, scan_tree, source_files
+from .scanning import (
+    DOCS,
+    MAX_FILE_BYTES,
+    MAX_FILES_SCANNED,
+    SOURCE_EXTENSIONS,
+    ScanResult,
+    file_role,
+    sanitize_text,
+    scan_tree,
+    source_files,
+)
 
 DOC_EXTENSIONS = {".md", ".txt"}
 
@@ -81,6 +92,7 @@ def analyze_tree(result: ScanResult, purpose: str = "") -> dict:
     findings.extend(source_mod.dataflow_findings(all_flows))
     findings.extend(source_mod.combination_findings(matches))
     findings.extend(injection_mod.analyze(sources, docs))
+    findings.extend(annotations_mod.analyze(sources, matches))
     findings.extend(install_mod.analyze(result))
 
     dependency_report = deps_mod.analyze(result)
@@ -109,6 +121,82 @@ def _flow_note(report: AuditReport, analysis: dict) -> None:
             f"{hidden} further data flow(s) were not listed; every one of them was "
             "still considered for the findings above."
         )
+
+
+def _is_source(path: str) -> bool:
+    return os.path.splitext(path)[1].lower() in SOURCE_EXTENSIONS
+
+
+def unanalyzed_findings(result: ScanResult) -> List[Finding]:
+    """Source files the scan skipped, as findings that can move the verdict.
+
+    A limitation line alone left the headline and the exit code untouched, so
+    a server that put its payload in a 600 KB `server.py`, in a `.js` file
+    with a NUL byte near the top, or past the file-count limit, came out NOT
+    FLAGGED with exit 0 - the one thing a CI gate reads as "passed". Not
+    having read the code is not evidence that it is clean.
+
+    Only files with a source extension count: an oversized `package-lock.json`
+    or README is not code that runs. Each skipped file is its own piece of
+    evidence, so the usual headline rule applies per file - a huge test
+    fixture is reported but does not decide the verdict, an oversized file in
+    the shipped server does.
+    """
+    findings: List[Finding] = []
+    limit_kb = MAX_FILE_BYTES // 1024
+
+    too_large = [(p, n) for p, n in result.skipped_too_large if _is_source(p)]
+    if too_large:
+        findings.append(Finding(
+            area=Area.SOURCE_CODE,
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            title=f"{len(too_large)} source file(s) too large to analyze",
+            explanation=(
+                f"These files are over the {limit_kb} KB per-file limit, so none of "
+                "the checks read them. Whatever they do is not in this report, and "
+                "a large file is a known place to hide code from a scanner."
+            ),
+            evidence=[Evidence(path=sanitize_text(p), detail=f"{n} bytes, not read") for p, n in too_large],
+            remediation="Read these files yourself before relying on this verdict.",
+            rule_id="source.unanalyzed_too_large",
+        ))
+
+    unread = sorted(
+        [p for p in result.skipped_unreadable if _is_source(p)]
+        + [p for p in result.skipped_binary if _is_source(p)]
+    )
+    if unread:
+        findings.append(Finding(
+            area=Area.SOURCE_CODE,
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            title=f"{len(unread)} source file(s) could not be analyzed",
+            explanation=(
+                "These files have a source extension but were not read: the "
+                "operating system refused them, or they contain a NUL byte and "
+                "were taken for binary. None of the checks covered them."
+            ),
+            evidence=[Evidence(path=sanitize_text(p), detail="not read") for p in unread],
+            remediation="Read these files yourself before relying on this verdict.",
+            rule_id="source.unanalyzed_unreadable",
+        ))
+
+    if result.hit_file_limit:
+        findings.append(Finding(
+            area=Area.SOURCE_CODE,
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            title="File-count limit reached; part of the tree was not analyzed",
+            explanation=(
+                f"The scan stops after {MAX_FILES_SCANNED} files, and this tree has "
+                "more. Files past the limit were not read, so the verdict does not "
+                "cover them."
+            ),
+            remediation="Audit the server's own directory with --path, not a parent of it.",
+            rule_id="source.file_limit_reached",
+        ))
+    return findings
 
 
 def _scan_notes(report: AuditReport, result: ScanResult, dependency_report) -> None:
@@ -164,7 +252,7 @@ def audit_directory(path: str, purpose: str = "", target: Optional[str] = None) 
     analysis = analyze_tree(result, purpose)
 
     report = AuditReport(target=target or os.path.basename(os.path.abspath(path)))
-    report.findings = analysis["findings"]
+    report.findings = analysis["findings"] + unanalyzed_findings(result)
     report.capabilities = analysis["capabilities"]
     report.credentials = analysis["credentials"]
     report.endpoints = analysis["endpoints"]
@@ -267,6 +355,7 @@ def audit_repository(
         result = scan_tree(local_path)
         analysis = analyze_tree(result, purpose)
         report.findings.extend(analysis["findings"])
+        report.findings.extend(unanalyzed_findings(result))
         report.capabilities = analysis["capabilities"]
         report.credentials = analysis["credentials"]
         report.endpoints = analysis["endpoints"]
