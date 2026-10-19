@@ -152,6 +152,7 @@ AI agent, on hostile input*.
 | **Dependencies** | counts, pinning, git/URL sources, missing lockfiles (a lockfile is found at any size) |
 | **Data flow** | a sensitive read sitting near an outbound call, in one file; a provider's own key sent only to that documented provider is kept but rated LOW |
 | **Tool poisoning** | instruction override, role spoofing, concealment, secret solicitation, cross-tool redirection |
+| **Misleading annotations** | a tool marked `readOnlyHint: true` whose own body runs commands, deletes or writes files; a tool marked `destructiveHint: false` that deletes. Clients may skip confirmation for read-only tools, so a false hint removes a safeguard. Only literal hints are judged, scoped to the decorated function (Python) or the `registerTool` call (JS/TS) |
 | **Provenance** | registry/source mismatch, missing repository, remote-only servers |
 | **Repository trust** | archived, disabled, fork, licence, releases, staleness |
 | **Popularity integrity** | the original star/fork/age relationship |
@@ -650,7 +651,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**563 tests**, no network access in any of them. Beyond the analyzers, one
+**611 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:

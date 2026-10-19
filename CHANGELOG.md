@@ -8,7 +8,6 @@ words around them moved, with one exception: skipped source files now count
 toward the verdict (the first entry below).
 
 ### Fixed
-
 - **A source file the scan skipped left the verdict and the exit code clean.**
   A payload in a 600 KB `server.py`, in a `.js` file with a NUL byte near the
   top (filed as binary), in a file the OS refused, or past the 3000-file limit
@@ -39,7 +38,6 @@ toward the verdict (the first entry below).
   needs none.
 
 ### Added
-
 - **SARIF 2.1.0 output** (`mcp-vet audit --sarif`, `mcp-vet report --sarif`)
   for GitHub code scanning. One result per finding, located on the evidence
   file and line, with `security-severity` from the severity, `precision` from
@@ -48,8 +46,30 @@ toward the verdict (the first entry below).
   notifications, so a partial audit does not read as a clean one. Exit codes
   and the JSON output are unchanged. Tests in `tests/test_sarif.py`.
 
-### Changed
+- **Misleading tool annotations** (`annotations.read_only_contradicted`,
+  `annotations.non_destructive_contradicted`, area `capabilities`). A tool
+  whose literal `readOnlyHint: true` / `read_only_hint=True` is contradicted
+  by its own body (shell, process spawn, eval, delete, chmod, persistence,
+  package install: HIGH; a file write: MEDIUM), or whose `destructiveHint:
+  false` sits over a delete. Python claims are scoped to the decorated
+  function and followed through module-level `ToolAnnotations` constants
+  (MEDIUM confidence); JS/TS claims to the `registerTool(...)` / `.tool(...)`
+  call (LOW confidence). Computed hints and mentions in comments, docstrings
+  or denylists are not judged. Run against the official reference servers
+  (`filesystem`: 11 literal hints, `memory`: 9) and four of this user's own
+  servers, it raises nothing. Tests in `tests/test_annotations.py`, fixture
+  `tests/fixtures/lying_annotations`.
+- `scripts/demo-uret.py` and `scripts/demo-kayit.js`: run the demo commands for
+  real, write `docs/demo/komutlar.txt`, and record `demo.mp4`/`demo.gif`
+  (and, without committing it, a 1080x1920 silent recording).
+- `tests/test_first_run_messages.py`, `tests/test_readme_commands.py` and
+  `tests/test_unreadable_files.py`: the
+  words of every error and help text, and every `mcp-vet ...` line in the README
+  and SKILL.md against the real argument parser.
+- A CI step that a folder typed as `owner/repo` exits 4 and names the right
+  command.
 
+### Changed
 - `--help` opens with a command that works (clone, then
   `mcp-vet audit --offline --path ./checkout`), lists one example per command,
   and states the exit codes and that "nothing above INFO" is not "safe".
@@ -70,22 +90,9 @@ toward the verdict (the first entry below).
   code 4 is never a clean result.
 
 ### Removed
-
 - The sound-track motion reel (`docs/reel/`), `assets/audit.gif` and
   `assets/audit.svg`: none had a generator in the repository, and the SVG was an
   abridgement of a run. They remain in git history.
-
-### Added
-
-- `scripts/demo-uret.py` and `scripts/demo-kayit.js`: run the demo commands for
-  real, write `docs/demo/komutlar.txt`, and record `demo.mp4`/`demo.gif`
-  (and, without committing it, a 1080x1920 silent recording).
-- `tests/test_first_run_messages.py`, `tests/test_readme_commands.py` and
-  `tests/test_unreadable_files.py`: the
-  words of every error and help text, and every `mcp-vet ...` line in the README
-  and SKILL.md against the real argument parser.
-- A CI step that a folder typed as `owner/repo` exits 4 and names the right
-  command.
 
 ## 0.6.0 — Blind spots closed, and five false positives found on its own siblings
 
