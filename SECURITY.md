@@ -78,7 +78,8 @@ it is the part that tells you how much the rest is worth.
 - **Novel techniques.** The catalogue matches what it knows.
 - **Deliberate obfuscation.** Code assembled from fragments, fetched at
   runtime, or hidden past the file-size limit can evade it. The limits are
-  reported for exactly this reason.
+  reported for exactly this reason, and a skipped *source* file is a HIGH
+  finding, so hiding behind a limit fails a gate instead of passing it.
 - **Intent.** `subprocess.run` is a git server working correctly and a backdoor
   executing, and they look identical to a regex.
 - **Semantics of a data flow.** Findings report co-location, not proven taint.
@@ -159,7 +160,8 @@ seeing something real.** A quieter report is not a safer server.
 3. mcp-vet emits no escape sequences of its own, so a reader can always tell
    the tool's formatting from a repository's injected formatting.
 4. Work is bounded (file size, file count, line count) and whatever is skipped
-   is reported.
+   is reported. Skipped source files are findings, not only notes: they reach
+   the verdict and the exit code.
 5. Symlinks are not followed; vendored directories are not scanned.
 6. All network access is GET, to `api.github.com` and
    `registry.modelcontextprotocol.io`.

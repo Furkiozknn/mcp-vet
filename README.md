@@ -35,7 +35,7 @@ hint: to audit a folder on disk, use
 [![Claude Code Skill](https://img.shields.io/badge/claude--code-skill-8ec9ff?style=flat-square&labelColor=0a120f)](https://claude.com/claude-code)
 [![Protocol](https://img.shields.io/badge/protocol-MCP-ffd76d?style=flat-square&labelColor=0a120f)](https://modelcontextprotocol.io)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-8effc2?style=flat-square&labelColor=0a120f)](#-zero-dependencies)
-[![Tests](https://img.shields.io/badge/tests-552%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-563%20passing-8ec9ff?style=flat-square&labelColor=0a120f)](#-testing)
 [![Security policy](https://img.shields.io/badge/security-policy-ffd76d?style=flat-square&labelColor=0a120f)](SECURITY.md)
 
 </div>
@@ -152,6 +152,7 @@ AI agent, on hostile input*.
 | **Dependencies** | counts, pinning, git/URL sources, missing lockfiles (a lockfile is found at any size) |
 | **Data flow** | a sensitive read sitting near an outbound call, in one file; a provider's own key sent only to that documented provider is kept but rated LOW |
 | **Tool poisoning** | instruction override, role spoofing, concealment, secret solicitation, cross-tool redirection |
+| **Misleading annotations** | a tool marked `readOnlyHint: true` whose own body runs commands, deletes or writes files; a tool marked `destructiveHint: false` that deletes. Clients may skip confirmation for read-only tools, so a false hint removes a safeguard. Only literal hints are judged, scoped to the decorated function (Python) or the `registerTool` call (JS/TS) |
 | **Provenance** | registry/source mismatch, missing repository, remote-only servers |
 | **Repository trust** | archived, disabled, fork, licence, releases, staleness |
 | **Popularity integrity** | the original star/fork/age relationship |
@@ -523,6 +524,21 @@ mcp-vet audit owner/repo --path ./checkout --json | jq '.findings[] | select(.se
 `0` and `4` are deliberately distinct: *"found nothing"* and *"could not look"*
 must never share an exit code, or a broken gate reads as a passing one.
 
+The same rule covers *"looked at part of it"*. A source file the scan could not
+read is a **HIGH** finding, so it reaches the verdict and exit `2` instead of
+only a line under limitations:
+
+| `rule_id` | Raised when |
+|---|---|
+| `source.unanalyzed_too_large` | a source file is over the 512 KB per-file limit |
+| `source.unanalyzed_unreadable` | a source file was refused by the OS, or holds a NUL byte and was taken for binary |
+| `source.file_limit_reached` | the tree has more than 3000 readable files and the rest were not scanned |
+
+Only source extensions count (`.py`, `.js`, `.ts`, `.sh`, …): a 2 MB
+`package-lock.json` or README stays a limitation. Each skipped file is its own
+piece of evidence, so as everywhere else a file under `tests/` or `scripts/` is
+reported without setting the headline.
+
 ```yaml
 - name: Audit MCP server
   run: |
@@ -538,6 +554,74 @@ must never share an exit code, or a broken gate reads as a passing one.
 
 The schema is versioned and documented in **[docs/json-schema.md](docs/json-schema.md)**.
 Output is byte-stable across runs, so two reports can be diffed directly.
+
+### SARIF for GitHub code scanning
+
+```bash
+mcp-vet audit --offline --path ./checkout --sarif > mcp-vet.sarif
+mcp-vet report --offline --path ./checkout --sarif
+```
+
+`--sarif` writes the same audit as a SARIF 2.1.0 log, so the findings show up
+as code-scanning alerts on the file and line they came from (upload it with
+`github/codeql-action/upload-sarif`). The exit code is unchanged. The mapping
+keeps mcp-vet's rules rather than inventing new ones:
+
+| mcp-vet | SARIF |
+|---|---|
+| `rule_id`, title, explanation, remediation | `rules[].id`, `shortDescription`, `fullDescription`, `help` |
+| CRITICAL / HIGH / MEDIUM / LOW | `security-severity` 9.5 / 8.0 / 5.5 / 3.0, `level` error / error / warning / warning |
+| INFO | `level` note, no `security-severity` |
+| confidence | rule `precision` and `properties.confidence` |
+| finding that does not set the verdict (only in tests, docs, a denylist or a comment) | `level` note, `properties.sets_verdict: false`, so a gate on errors agrees with the exit code |
+| every evidence line | the first is the result's location, the rest `relatedLocations` |
+| "What this did not check" | `invocations[0].toolExecutionNotifications`, level warning |
+
+Results get a `partialFingerprints` hash of rule, file and snippet (not the
+line number), so an unrelated edit above a finding does not reopen it as new.
+URIs are relative to the directory mcp-vet runs from, the checkout root in CI,
+so `--path server` produces `server/index.ts` and the alert lands on the file.
+Findings from repository metadata or the registry have no file, so code
+scanning cannot place them; audit with `--offline --path` in CI, where every
+finding comes from a file.
+
+### GitHub Action
+
+`action.yml` at the root of this repository is a composite action. It runs
+one offline audit, uploads the SARIF to code scanning, writes a findings table
+to the job summary, and fails the job at the severity you choose:
+
+```yaml
+jobs:
+  mcp-vet:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # for the SARIF upload
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Furkiozknn/mcp-vet@master   # pin a commit SHA in real use
+        with:
+          path: .            # the server to audit
+          fail-on: high      # critical | high | medium | low | none
+```
+
+| Input | Default | Meaning |
+|---|---|---|
+| `path` | `.` | directory to audit; check it out first, mcp-vet never clones |
+| `fail-on` | `high` | fail at this severity or above; `medium` and `low` are both exit code 1. Exit code 4 ("could not look") always fails |
+| `upload-sarif` | `true` | upload to code scanning (a private repository also needs GitHub Advanced Security) |
+| `category` | `mcp-vet` | code-scanning category, to keep several runs apart |
+| `sarif-file` | `$RUNNER_TEMP/mcp-vet.sarif` | where the SARIF goes, outside your checkout by default |
+| `purpose` | empty | what the server claims to do, for endpoint classification |
+
+Outputs: `exit-code`, `overall`, `findings`, `sarif-file`. The audit runs once,
+and the SARIF, the summary and the gate are all read from that one run, so
+they cannot disagree. The SARIF upload runs before the gate, so a failing run
+still leaves its alerts. Nothing is installed: mcp-vet is standard library
+only, and the action runs the copy you pinned. The body is
+`scripts/action_run.py`, so it behaves the same on Linux, macOS and Windows
+runners and has its own tests (`tests/test_action_run.py`).
 
 ---
 
@@ -605,7 +689,7 @@ pip install -e .[dev]
 pytest
 ```
 
-**552 tests**, no network access in any of them. Beyond the analyzers, one
+**641 tests**, no network access in any of them. Beyond the analyzers, one
 whole file — `tests/test_hostile_input.py` — treats **mcp-vet itself** as the
 target, because it reads untrusted repositories and prints them into a terminal
 and into an agent's context:

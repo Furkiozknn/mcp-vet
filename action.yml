@@ -1,0 +1,104 @@
+name: "mcp-vet"
+description: "Static security audit of an MCP server's source: findings with file:line, as GitHub code-scanning alerts. Never runs the code it audits."
+author: "Furkiozknn"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  path:
+    description: "Directory to audit, relative to the workspace. Check it out first; mcp-vet never clones."
+    required: false
+    default: "."
+  fail-on:
+    description: >-
+      Fail the job at this severity or above: critical, high (default),
+      medium, low, or none. medium and low are the same threshold, because
+      both are exit code 1. "Could not look" (exit code 4) always fails.
+    required: false
+    default: "high"
+  upload-sarif:
+    description: >-
+      Upload the SARIF file to GitHub code scanning ("true" or "false").
+      Needs `permissions: security-events: write` on the job; code scanning
+      on a private repository also needs GitHub Advanced Security.
+    required: false
+    default: "true"
+  category:
+    description: "Code-scanning category, to keep several mcp-vet runs in one repository apart."
+    required: false
+    default: "mcp-vet"
+  sarif-file:
+    description: "Where to write the SARIF file. Empty (the default) means $RUNNER_TEMP/mcp-vet.sarif, outside your checkout."
+    required: false
+    default: ""
+  purpose:
+    description: "What the server claims to do. Improves how network destinations are classified."
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "mcp-vet's exit code: 0 nothing above INFO, 1 low/medium, 2 high, 3 critical, 4 could not complete."
+    value: ${{ steps.vet.outputs.exit-code }}
+  overall:
+    description: "The overall verdict, e.g. NOT_FLAGGED, MEDIUM, HIGH."
+    value: ${{ steps.vet.outputs.overall }}
+  findings:
+    description: "Number of findings."
+    value: ${{ steps.vet.outputs.findings }}
+  sarif-file:
+    description: "Path of the SARIF file."
+    value: ${{ steps.vet.outputs.sarif-file }}
+
+runs:
+  using: "composite"
+  steps:
+    # `update-environment: false`: a composite action shares the caller's
+    # job, and setup-python would otherwise put its interpreter first on PATH
+    # for every later step of that job.
+    - uses: actions/setup-python@v6
+      id: python
+      with:
+        python-version: "3.12"
+        update-environment: false
+
+    # mcp-vet is standard library only, so there is nothing to install: the
+    # action runs the copy it was checked out as, which is the version you
+    # pinned in `uses:`.
+    - name: Audit with mcp-vet
+      id: vet
+      shell: bash
+      # Inputs reach the script as environment variables, never as `${{ }}`
+      # inside it, where a value would run as shell code.
+      env:
+        MV_PYTHON: ${{ steps.python.outputs.python-path }}
+        MV_SCRIPT: ${{ github.action_path }}/scripts/action_run.py
+        MV_PATH: ${{ inputs.path }}
+        MV_FAIL_ON: ${{ inputs.fail-on }}
+        MV_SARIF: ${{ inputs.sarif-file }}
+        MV_PURPOSE: ${{ inputs.purpose }}
+      run: '"$MV_PYTHON" "$MV_SCRIPT"'
+
+    # Runs whether or not the audit crossed the threshold, so a failing run
+    # still leaves its alerts in code scanning.
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' && steps.vet.outputs.sarif-file != '' }}
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.vet.outputs.sarif-file }}
+        category: ${{ inputs.category }}
+
+    - name: Apply fail-on
+      shell: bash
+      env:
+        MV_FAILED: ${{ steps.vet.outputs.failed }}
+        MV_OVERALL: ${{ steps.vet.outputs.overall }}
+        MV_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        if [ "$MV_FAILED" = "true" ]; then
+          echo "::error title=mcp-vet::overall $MV_OVERALL is at or above fail-on=$MV_FAIL_ON"
+          exit 1
+        fi
+        echo "mcp-vet: overall $MV_OVERALL, below fail-on=$MV_FAIL_ON"
