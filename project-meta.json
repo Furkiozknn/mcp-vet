@@ -52,8 +52,8 @@
     "videos": []
   },
   "tests": {
-    "count": 552,
-    "source": "CI log: `552 passed`",
+    "count": 611,
+    "source": "CI log: `611 passed`",
     "measured": "2026-09-30"
   },
   "ci": {
