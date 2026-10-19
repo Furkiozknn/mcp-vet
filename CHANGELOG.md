@@ -45,6 +45,12 @@ toward the verdict (the first entry below).
   (so a gate on errors agrees with the exit code). Limitations travel as tool
   notifications, so a partial audit does not read as a clean one. Exit codes
   and the JSON output are unchanged. Tests in `tests/test_sarif.py`.
+- **A composite GitHub Action** (`action.yml` at the root, body in
+  `scripts/action_run.py`): one offline audit becomes a SARIF upload to code
+  scanning, a findings table in the job summary and a `fail-on` gate
+  (critical / high / medium / low / none). "Could not look" always fails.
+  Repository text in the summary is escaped so it cannot become a link, an
+  image or a tag. Tests in `tests/test_action_run.py`.
 
 - **Misleading tool annotations** (`annotations.read_only_contradicted`,
   `annotations.non_destructive_contradicted`, area `capabilities`). A tool
